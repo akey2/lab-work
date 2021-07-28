@@ -1,6 +1,7 @@
 %%% This script should live in your Matlab startup folder (typically,
 %%% for windows, your 'Documents\MATLAB' folder). Change the file paths
-%%% below to suit your setup.
+%%% below to suit your setup. Rename the file to "startup.m" - it will then
+%%% execute every time Matlab starts.
 
 
 setenv('LOCALDATADIR', 'C:\Users\irwin\Documents\Lab work\Data');       % local directory where data will be saved
