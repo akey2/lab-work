@@ -191,7 +191,8 @@ switch tasktype
             
             numreps = length(d.Session.Block);
             restperiods = [];
-            dtrials = [d.Session.Block.Trial];
+%             dtrials = [d.Session.Block.Trial];
+            dtrials = MergeStructs({d.Session.Block.Trial});
             trial = repmat(trial, 1, length(dtrials));
             
             if (~taskonly)
@@ -266,5 +267,9 @@ if (savetable)
     d.RT(cellfun(@isempty, d.RT)) = {nan};
     d.RT = [d.RT{:}]';
     [fname, fpath] = uiputfile('*.xlsx');
-    writetable(d, fullfile(fpath, fname));
+    if (ischar(fname))
+        writetable(d, fullfile(fpath, fname));
+    else
+        warning('Unable to save table');
+    end
 end
