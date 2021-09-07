@@ -11,19 +11,23 @@ end
 
 d = ParseEPrimeOutput(taskfile);
 
-if (~taskonly)
-    ttl = getTTLTimes(bvevents);
-    
-    trial = struct('Condition', [], 'Stimulus', [], 'Response', [], 'RT', [], 'ACC', [], ...
-        'BlockType', [], 'Repetition', [], 'StimulusTime', [], 'ResponseTime', [], 'FeedbackTime', []);
-else
-    trial = struct('Condition', [], 'Stimulus', [], 'Response', [], 'RT', [], 'ACC', [], ...
-        'BlockType', [], 'Repetition', []);
-end
-
 switch tasktype
     case "Simon"
-        if (contains(taskfile, 'v2'))
+        
+        if (~taskonly)
+            ttl = getTTLTimes(bvevents);
+            
+            trial = struct('Condition', [], 'Stimulus', [], 'Response', [], 'RT', [], 'ACC', [], ...
+                'BlockType', [], 'Repetition', [], 'StimulusTime', [], 'ResponseTime', [], 'FeedbackTime', []);
+        else
+            trial = struct('Condition', [], 'Stimulus', [], 'Response', [], 'RT', [], 'ACC', [], ...
+                'BlockType', [], 'Repetition', []);
+        end
+        
+        % Forgot to change the version number for the task, so we have to
+        % differentiate based on the date:
+        if (contains(taskfile, 'v2') && ...
+                datetime(d.SessionDate, 'InputFormat', 'MM-dd-yyyy') < datetime('06-01-2020', 'InputFormat', 'MM-dd-yyyy'))
             
             if (~taskonly)
                 pidx = find(strcmpi(params(1:2:end), 'stimttlchan'));
@@ -110,12 +114,106 @@ switch tasktype
                 restperiods = [];
             end
             
+        elseif (contains(taskfile, 'v2'))
+            if (~taskonly)
+                pidx = find(strcmpi(params(1:2:end), 'stimttlchan'));
+                assert(~isempty(pidx), 'Simon v2: Please provide a Stimulus On/Offset TTL Channel: ''stimttlchan''');
+                taskmarkers = ttl{params{pidx*2}}; % up = stim onset, down = feedback onset
+                
+                pidx = find(strcmpi(params(1:2:end), 'respttlchan'));
+                assert(~isempty(pidx), 'Simon v2: Please provide a Response TTL Channel: ''respttlchan''');
+                bps = ttl{params{pidx*2}}(1:2:end);
+                
+                pidx = find(strcmpi(params(1:2:end), 'samplerate'));
+                assert(~isempty(pidx), 'Simon v2: Please provide a sample rate: ''samplerate''');
+                samplerate = params{pidx*2};
+                
+                resttime = d.Session.RestTime;
+            end
+            
+            numreps = length(d.Session.Block);
+            dtrials = [d.Session.Block.Trial];
+            trial = repmat(trial, 1, length(dtrials));
+            
+            if (~taskonly)
+                % in this version, there's a 1 sec pulse at the start of
+                % the rest period
+                assert(length(taskmarkers)/2 == length(trial) + numreps, 'Simon v2: TTL and task files don''t match');
+            end
+            
+            if (~taskonly)
+                restperiods = zeros(numreps,2);
+                restidxs = zeros(1,numreps);
+                for i = 1:numreps
+                    
+                    if (i > 1)
+                        restidxs(i) = sum(arrayfun(@(x) length(x.Trial), d.Session.Block(i-1))) + i;
+                    else
+                        restidxs(i) = 1;
+                    end
+                    
+                    assert(abs((taskmarkers(restidxs(i)*2) - taskmarkers((restidxs(i)-1)*2+1))/samplerate - 1) < .05, 'Simon v2: can''t find initial rest period');
+                    
+                    restperiods(i,:) = taskmarkers((restidxs(i)-1)*2+1) + [0, resttime*samplerate/1000];
+
+                end
+                taskmarkers(reshape([restidxs;restidxs+1], 1, [])) = []; % remove rest period markers
+                
+            else
+                restperiods = [];
+            end
+            
+            badtrials = false(1, length(trial));  
+            
+            for i = 1:length(trial)
+                
+                if (dtrials(i).Arrow == dtrials(i).Position)
+                    trial(i).Condition = "Congruent";
+                else
+                    trial(i).Condition = "Incongruent";
+                end
+                
+                trial(i).Stimulus = strcat(dtrials(i).Arrow, dtrials(i).Position);
+                trial(i).Response = dtrials(i).Stimulus_RESP;
+                if (dtrials(i).Running == "ControlList")
+                    trial(i).BlockType = "Control";
+                else
+                    trial(i).BlockType = "Test";
+                end
+                trial(i).Repetition = find(i <= cumsum(arrayfun(@(x) length(x.Trial), d.Session.Block)), 1);
+                trial(i).ACC = dtrials(i).Stimulus_ACC == 1;
+                
+                if (~taskonly)
+                    trial(i).StimulusTime = taskmarkers((i-1)*2+1);
+                    trial(i).FeedbackTime = taskmarkers(i*2);
+                    if (trial(i).Response)
+                        trial(i).ResponseTime = bps(find(bps > trial(i).StimulusTime, 1));
+                        trial(i).RT = dtrials(i).Stimulus_RT;
+                    end
+                else
+                    if (trial(i).Response)
+                        trial(i).RT = dtrials(i).Stimulus_RT;
+                    end
+                end
+                
+            end
             
         elseif (contains(taskfile, 'v3'))
         else
             error('Simon task version not supported');
         end
     case "Go/No-Go"
+        
+        if (~taskonly)
+            ttl = getTTLTimes(bvevents);
+            
+            trial = struct('Condition', [], 'Stimulus', [], 'Response', [], 'RT', [], 'ACC', [], ...
+                'BlockType', [], 'Repetition', [], 'StimulusTime', [], 'ResponseTime', [], 'FeedbackTime', []);
+        else
+            trial = struct('Condition', [], 'Stimulus', [], 'Response', [], 'RT', [], 'ACC', [], ...
+                'BlockType', [], 'Repetition', []);
+        end
+        
         if (contains(taskfile, 'v3'))
 
             if (~taskonly)
@@ -256,6 +354,106 @@ switch tasktype
         else
             error('Go/No-Go task version not supported');
         end
+    case "DelayedReach"
+        
+        if (~taskonly)
+            ttl = getTTLTimes(bvevents);
+            
+            trial = struct('Target', [], 'ACC', [], 'Delay', [], 'ACC_Delay', [], 'CenterAcquireTime', [], 'TargetOnsetTime', [], 'GoCueTime', [], 'InTargetTimes', []);
+        else
+            trial = struct('Target', [], 'ACC', [], 'Delay', [], 'ACC_Delay', []);
+        end
+        
+        % Forgot to change the version number for the task, so we have to
+        % differentiate based on the date:
+        if (datetime(d.SessionDate, 'InputFormat', 'MM-dd-yyyy') >= datetime('09-30-2020', 'InputFormat', 'MM-dd-yyyy'))
+            
+            restperiods = [];
+            dtrials = MergeStructs({d.Session.Block});
+            trial = repmat(trial, 1, length(dtrials)-1);
+            
+            if (~taskonly)
+                pidx = find(strcmpi(params(1:2:end), 'targttlchan'));
+                assert(~isempty(pidx), 'DelayedReachV2: Please provide a Target Onset TTL Channel: ''targttlchan''');
+                taskmarkers = ttl{params{pidx*2}};
+                
+                pidx = find(strcmpi(params(1:2:end), 'hitttlchan'));
+                assert(~isempty(pidx), 'DelayedReachV2: Please provide a Target Hit TTL Channel: ''hitttlchan''');
+                hitmarkers = ttl{params{pidx*2}};
+                
+                pidx = find(strcmpi(params(1:2:end), 'samplerate'));
+                assert(~isempty(pidx), 'DelayedReachV2: Please provide a sample rate: ''samplerate''');
+                samplerate = params{pidx*2};
+                
+                % taskmarkers: 50 ms pulse on center target onset (dashed radial target appears after delay), 100 ms pulse on radial
+                % target onset.
+                
+                % hitmarkers: goes high when entering a target, low when exiting
+                
+            end
+            
+            badtrials = false(1, length(trial));
+            
+            tmarkidx = 1;
+            for i = 1:length(dtrials)-1
+                trial(i).Target = dtrials(i).Target;
+                trial(i).Delay = dtrials(i).DELAY;
+                trial(i).ACC = dtrials(i).ACC == "True";
+                trial(i).ACC_Delay = dtrials(i).SKIPTRIAL == "False";
+                
+                if (~taskonly)
+
+                   if (trial(i).ACC_Delay)
+                       
+                       centerontime = taskmarkers(tmarkidx*2-1);
+                       trial(i).GoCueTime = taskmarkers((tmarkidx+1)*2-1);
+                       trial(i).TargetOnsetTime = trial(i).GoCueTime - trial(i).Delay*samplerate/1000;
+                       trial(i).CenterAcquireTime = hitmarkers(find(hitmarkers(1:2:end) < trial(i).TargetOnsetTime, 1, 'last')*2-1);
+                       tmarkidx = tmarkidx + 2;
+                   else
+                       
+                       centerontime = taskmarkers(tmarkidx*2-1);
+                       trial(i).GoCueTime = [];
+                       trial(i).CenterAcquireTime = hitmarkers(find(hitmarkers(1:2:end) < taskmarkers((tmarkidx+1)*2-1), 1, 'last')*2-1);
+                       trial(i).TargetOnsetTime = trial(i).CenterAcquireTime + d.Session.CENTER_HOLD_TIME*samplerate/1000;
+                       tmarkidx = tmarkidx + 1;
+                   end
+                   
+                   trial(i).InTargetTimes = reshape(hitmarkers(hitmarkers >= centerontime & hitmarkers < taskmarkers(tmarkidx*2-1)), [], 2);
+
+                end
+            end
+        else
+            
+            restperiods = [];
+            dtrials = MergeStructs({d.Session.Block});
+            trial = repmat(trial, 1, length(dtrials));
+            
+            if (~taskonly)
+                pidx = find(strcmpi(params(1:2:end), 'targttlchan'));
+                assert(~isempty(pidx), 'DelayedReachV2: Please provide a Target Onset TTL Channel: ''targttlchan''');
+                taskmarkers = ttl{params{pidx*2}};
+                
+                pidx = find(strcmpi(params(1:2:end), 'hitttlchan'));
+                assert(~isempty(pidx), 'DelayedReachV2: Please provide a Target Hit TTL Channel: ''hitttlchan''');
+                hitmarkers = ttl{params{pidx*2}};
+                
+                pidx = find(strcmpi(params(1:2:end), 'samplerate'));
+                assert(~isempty(pidx), 'DelayedReachV2: Please provide a sample rate: ''samplerate''');
+                samplerate = params{pidx*2};
+                
+                % centermarker: 100 ms pulse on center target onset (dashed radial target appears after delay)
+                % radialmarker: 100 ms pulse on radial target onset
+                
+                % hitmarkers: goes high when entering a target, low when exiting
+                
+                % NOTE: there's a bug in this version of the task, where the radialmarker TTL never resets after a
+                % skipped trial, if it happens within the 50 ms pulse after center target onset
+                
+            end
+            
+        end
+            
     otherwise
         error('Task type not supported');
 end
