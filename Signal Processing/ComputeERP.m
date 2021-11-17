@@ -1,12 +1,12 @@
-% function [erp, windows] = ComputeERP(subject, 
+function [erps, t, epochs] = ComputeERP(subj, fname, modality, freq, window, montage) 
 
 % parameters:
-subj = 'BB004';
-fname = 'LFP_200Hz';
-modality = 'ecog';
-freq = [2, 5000];
-window = [-150, 350];
-montage = 'bipolar'; % 'common', 'bipolar', or cell array of 2xN matrices (one per modality) 
+% subj = 'BB004';
+% fname = 'LFP_200Hz';
+% modality = 'dbs';
+% freq = [10, 1000];
+% window = [-150, 350];
+% montage = 'bipolar'; % 'common', 'bipolar', or cell array of 2xN matrices (one per modality) 
 
 % adjust parameters as necessary:
 % if (~iscell(fname))
@@ -25,7 +25,7 @@ sinfo = info(strcmp({info.ID}, subj));
 finfo = sinfo.File(strcmp({sinfo.File.FileName}, fname));
 
 % load and select data:
-[datamine, fi] = LoadDatav2(subj, fname);
+[data, fi] = LoadDatav2(subj, fname);
 
 datasel = cell(1,length(modality));
 badchans = cell(1,length(modality));
@@ -50,6 +50,14 @@ end
 
 % get stimulation info:
 trials = ParseStimulusTrials(fi);
+
+% remove 2nd pulse if stimuli are biphasic
+if (size(trials(1).StimAmp, 1) > 1)
+    for i = 1:length(trials)
+        trials(i).StimWidth_ms(2:end,:) = [];
+        trials(i).StimAmp(2:end,:) = [];
+    end
+end
 
 % determine unique stimulation conditions: stim channels, amplitude/polarity, pulse width
 stimchans = unique(cell2mat(arrayfun(@(x) abs(x.StimAmp) == max(abs(x.StimAmp)), trials, 'uni', 0)'), 'rows');
@@ -84,7 +92,7 @@ for i = 1:length(data)
                 midx = [trialsjk.StimWidth_ms] == stimwidths(m);
                 trialsjkm = trialsjk(midx);
                 
-                pol = sign(cell2mat(arrayfun(@(x) max(abs(x.StimAmp)), trialsjkm, 'uni', 0)'));
+                pol = cell2mat(arrayfun(@(x) extremum(x.StimAmp), trialsjkm, 'uni', 0)') > 0;
          
                 % collect data epochs:
                 epochs = EpochData(data{i}, [trialsjkm.StimLoc_sample], window*finfo.SampleRate/1000);

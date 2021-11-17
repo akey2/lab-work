@@ -103,7 +103,8 @@ ttlmarks = getTTLTimes(fileInfo.event);
 usedttls = find(cellfun(@length, ttlmarks) > 1);
 
 if (length(usedttls) == 1 || isempty(ttlchan))
-    ttlmarks = ttlmarks{usedttls(1)};
+%     ttlmarks = ttlmarks{usedttls(1)};
+    ttlmarks = ttlmarks{ExtremumLoc('max', cellfun(@length, ttlmarks))};
 elseif (~isempty(ttlchan))
     ttlmarks = ttlmarks{ttlchan};
 end

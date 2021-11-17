@@ -2,7 +2,7 @@
 %   * {group1, group2, ..., groupN} (group of boxes at a single x-axis point)
 %   * groupX = {[series1], [series2], ..., [seriesM]} (boxes within a group)
 
-function GroupedBoxPlot(data, grouplabels, serieslabels, connectgroups)
+function h = GroupedBoxPlot(data, grouplabels, serieslabels, connectgroups)
 
 % data = {ctrlRT, testRT_GO};
 % % data = {[ctrlRT(1), testRT_GO(1)], [ctrlRT(2), testRT_GO(2)]};

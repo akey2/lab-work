@@ -1,4 +1,4 @@
-function [result, idx] = extremum(data, dim, omitnan)
+function [result, idx, idx_ind] = extremum(data, dim, omitnan)
 
 if (nargin < 2 || isempty(dim))
     [~, dim] = max(size(data));
@@ -8,15 +8,15 @@ if (nargin < 3 || isempty(omitnan))
 end
 
 if (omitnan)
-    [result, idx] = max(abs(data),[],dim,'omitnan');
+    [~, idx] = max(abs(data),[],dim,'omitnan');
 else
-    [result, idx] = max(abs(data),[],dim);
+    [~, idx] = max(abs(data),[],dim);
 end
 
-% if (dim == 2)
-%     idx_ind = sub2ind(size(data), (1:size(data,1))',idx);
-% else
-%     idx_ind = sub2ind(size(data), idx, (1:size(data,2)));
-% end
-% 
-% result = data(idx_ind);
+if (dim == 2)
+    idx_ind = sub2ind(size(data), (1:size(data,dim))',idx);
+else
+    idx_ind = sub2ind(size(data), idx, (1:size(data,dim)));
+end
+
+result = data(idx_ind);
