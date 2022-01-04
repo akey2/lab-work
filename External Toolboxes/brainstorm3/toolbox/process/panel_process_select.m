@@ -2484,7 +2484,8 @@ function [bstPanel, panelName] = CreatePanel(sFiles, sFiles2, FileTimeVector)
         str = [str '% Save and display report' 10];
         str = [str 'ReportFile = bst_report(''Save'', sFiles);' 10];
         str = [str 'bst_report(''Open'', ReportFile);' 10];
-        str = [str '% bst_report(''Export'', ReportFile, ExportDir);' 10 10];
+        str = [str '% bst_report(''Export'', ReportFile, ExportDir);' 10];
+        str = [str '% bst_report(''Email'', ReportFile, username, to, subject, isFullReport);' 10 10];
         
         % Save script
         if isSave
@@ -2602,8 +2603,18 @@ function ParseProcessFolder(isForced) %#ok<DEFNU>
     PlugAll = bst_plugin('GetInstalled');
     for iPlug = 1:length(PlugAll)
         if ~isempty(PlugAll(iPlug).Processes)
+            % Keep only the processes with function names that are not already defined in Brainstorm
+            iOk = [];
+            for iProc = 1:length(PlugAll(iPlug).Processes)
+                [tmp, procFileName, procExt] = bst_fileparts(PlugAll(iPlug).Processes{iProc});
+                if ~ismember([procFileName, procExt], bstFunc)
+                    iOk = [iOk, iProc];
+                else
+                    % disp(['BST> Plugin ' PlugAll(iPlug).Name ': ' procFileName procExt ' already defined in Brainstorm']);
+                end
+            end
             % Concatenate plugin path and process function (relative to plugin path)
-            procFullPath = cellfun(@(c)bst_fullfile(PlugAll(iPlug).Path, c), PlugAll(iPlug).Processes, 'UniformOutput', 0);
+            procFullPath = cellfun(@(c)bst_fullfile(PlugAll(iPlug).Path, c), PlugAll(iPlug).Processes(iOk), 'UniformOutput', 0);
             plugFunc = cat(2, plugFunc, procFullPath);
         end
     end

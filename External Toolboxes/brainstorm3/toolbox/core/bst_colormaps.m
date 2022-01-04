@@ -1145,11 +1145,13 @@ function isModified = LoadColormap(ColormapType, FileName)
         % Get default import directory and formats
         LastUsedDirs = bst_get('LastUsedDirs');
         % Get LUT files
-        FileName = java_getfile( 'open', ...
+        [FileName, FileFormat] = java_getfile( 'open', ...
            'Import colormap...', ...      % Window title
            LastUsedDirs.ImportAnat, ...   % Default directory
            'single', 'files', ...         % Selection mode
-           {{'.lut'}, 'Color lookup table (*.lut)', 'LUT'}, 'LUT');
+           {{'.lut'}, 'Color lookup table (*.lut)', 'LUT'; ...
+            {'.mat'}, 'Matlab colormap matrix [nColor x 3] (*.mat)', 'MAT';...
+           }, 'MAT');
         % If no file was selected: exit
         if isempty(FileName)
             return
@@ -1161,21 +1163,50 @@ function isModified = LoadColormap(ColormapType, FileName)
     else
         isConfirm = 0;
     end
+    % Load colormap as .lut file
+    if strcmp(FileFormat, 'LUT')
+        % Open file
+        fid = fopen(FileName, 'rb');
+        if (fid < 0)
+            error(['Cannot open LUT file:' FileName]);
+        end
+        % Read file
+        CMap = fread(fid, Inf, 'uint8');
+        if (length(CMap) < 6)
+            error('Not a valid LUT file.');
+        end
+        % Close file
+        fclose(fid);
+        % Convert to Matlab format: [Ncolor x 3], values between 0 and 1
+        CMap = reshape(CMap ./ 255, [], 3);
     
-    % Open file
-	fid = fopen(FileName, 'rb');
-    if (fid < 0)
-        error(['Cannot open LUT file:' FileName]);
+    % Load colormap as .mat file
+    else
+        ContentMat = load(FileName);
+        fields = fieldnames(ContentMat);
+        validFields = {};
+        % Loop to find possible colormap matrices in fields
+        for i = 1:length(fields)
+            if ~isempty(ContentMat.(fields{i})) && isnumeric(ContentMat.(fields{i})) && size(ContentMat.(fields{i}), 2) == 3
+                validFields{end+1} = fields{i};
+            end
+        end
+        if isempty(validFields)
+            bst_error(['No valid colormap field in: "' FileName '"'], 'Load colormap', 0);
+            return
+        end
+        CMap = ContentMat.(validFields{1});
+        % If there is more than one possible colormap, ask user which colormap to load
+        if (length(validFields) > 1)
+            res = java_dialog('question', 'Please select the variable that contains your colormap:', ...
+                              'Colormap', [], validFields);
+            % If user did not answer: exit
+            if isempty(res)
+                return
+            end
+            CMap = ContentMat.(res);
+        end
     end
-    % Read file
-    CMap = fread(fid, Inf, 'uint8');
-    if (length(CMap) < 6)
-        error('Not a valid LUT file.');
-    end
-    % Close file 
-    fclose(fid);
-    % Convert to Matlab format: [Ncolor x 3], values between 0 and 1
-    CMap = reshape(CMap ./ 255, [], 3);
 
     % Read as a fixed list of colors
     if isConfirm
@@ -1405,23 +1436,31 @@ function ConfigureColorbar(hFig, ColormapType, DataType, DisplayUnits) %#ok<DEFN
         if isempty(fFactor)
             % Use imposed units 
             if ~isempty(DisplayUnits)
-                switch(DisplayUnits)
-                    case 't',    fFactor = 1;
-                    case 'mol.l-1', fFactor = 1;
-                    case 'mmol.l-1', fFactor = 1e3;
-                    case 'umol.l-1', fFactor = 1e6;
-                    case 'U.A.'
-                        fmax = max(abs(dataBounds));
-                        if fmax < 1e3
-                            fFactor=1e6;
-                            DisplayUnits='U.A(*10^6)';
-                        elseif fmax < 1
-                            fFactor=1e3;
-                            DisplayUnits='U.A(*10^3)';
-                        else
-                            fFactor=1;
-                        end
-                    otherwise,   fFactor = 1;
+                if strcmp(DisplayUnits,'t')
+                    fFactor = 1;
+                elseif ~isempty(strfind(DisplayUnits,'mol'))
+                     fmax = max(abs(dataBounds));
+                     if round(log10(fmax)) < -3
+                         fFactor = 1e6;
+                     else    
+                        fFactor = 1;  
+                     end   
+                elseif ~isempty(strfind(DisplayUnits,'OD'))
+                    fFactor = 1e3;
+                    DisplayUnits='OD(*10^-3)';
+                elseif strcmp(DisplayUnits,'U.A.')
+                    fmax = max(abs(dataBounds));
+                    if fmax < 1e3
+                        fFactor=1e6;
+                        DisplayUnits='U.A(*10^6)';
+                    elseif fmax < 1
+                        fFactor=1e3;
+                        DisplayUnits='U.A(*10^3)';
+                    else
+                        fFactor=1;
+                    end
+                else
+                     fFactor = 1;
                 end
                 fUnits = DisplayUnits;
             % Get data units from file maximum
