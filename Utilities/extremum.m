@@ -14,9 +14,9 @@ else
 end
 
 if (dim == 2)
-    idx_ind = sub2ind(size(data), (1:size(data,dim))',idx);
+    idx_ind = sub2ind(size(data), (1:size(data,1))',idx);
 else
-    idx_ind = sub2ind(size(data), idx, (1:size(data,dim)));
+    idx_ind = sub2ind(size(data), idx, (1:size(data,2)));
 end
 
 result = data(idx_ind);

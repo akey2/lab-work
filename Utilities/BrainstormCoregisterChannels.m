@@ -195,7 +195,7 @@ badsubs = subjids(badsubs);
 
 % Get COREG channel file name:
 coregchandirs = bst_get('StudyWithSubject',   subs.Subject(coregsubidx).FileName, 'intra_subject');
-idx = find(arrayfun(@(x) strcmpi(x.Name, 'Implantation'), coregchandirs));
+idx = find(arrayfun(@(x) contains(x.Name, 'Implantation'), coregchandirs));
 
 coregchanfile = coregchandirs(idx).Channel.FileName;
 coregchanfile = fullfile(datadir, coregchanfile);

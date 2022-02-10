@@ -1,4 +1,6 @@
-function BrainstormAddData(data, timevec, studyids, studyprefix, modality, bipolar, coregchans, name)
+% data ~ [num_chans X num_time_points]
+
+function coregsubs = BrainstormAddData(data, timevec, studyids, studyprefix, modality, bipolar, coregchans, name, replaceoldfiles)
 
 if (nargin < 7 || isempty(coregchans))
     coregchans = false;
@@ -8,15 +10,29 @@ if (length(timevec) > 1 && size(data, 2) < size(data, 1))
     data = data';
 end
 
-if (coregchans)
-    badsubs = BrainstormCoregisterChannels(studyids, studyprefix, modality, bipolar);
-    
-    % remove data for subjects that weren't coregistered:
-    subjids = arrayfun(@(x) sprintf('%s%03d', studyprefix, x), studyids, 'uni', 0);
-    n = 6 - bipolar;
-    badidxs = cell2mat(arrayfun(@(x) ((x-1)*n+1):x*n, find(ismember(subjids, badsubs)), 'uni', 0));
-    data(badidxs,:) = [];
+if (nargin < 9)
+    replaceoldfiles = [];
 end
+
+subjids = arrayfun(@(x) sprintf('%s%03d', studyprefix, x), studyids, 'uni', 0);
+
+if (~iscell(coregchans) && coregchans)
+    badsubs = BrainstormCoregisterChannels(studyids, studyprefix, modality, bipolar);
+       
+    coregsubs = setdiff(subjids, badsubs);
+elseif (iscell(coregchans))
+    badsubs = subjids(~ismember(subjids, coregchans));
+    
+    coregsubs = coregchans;
+else
+    error('''coregchans'' must be either ''true'' or a cell array of pre-coregistered subjects');
+end
+
+% remove data for subjects that weren't coregistered:
+
+n = 6 - bipolar;
+badidxs = cell2mat(arrayfun(@(x) ((x-1)*n+1):x*n, find(ismember(subjids, badsubs)), 'uni', 0));
+data(badidxs,:) = [];
 
 
 prot = bst_get('ProtocolInfo');
@@ -31,10 +47,21 @@ coregsubidx = cellfun(@(x) strcmp(x, 'COREG'), subnames);
 study = bst_get('StudyWithSubject', subs.Subject(coregsubidx).FileName);
 studyidx = arrayfun(@(x) isequaln(x, study), studies.Study);
 
+if (study.Channel.nbChannels ~= size(data,1))
+    error('Size of data matrix does not match the number of channels in Brainstorm');
+end
+
 % replace current data?
 n = length(study.Data);
 if (n > 0)
-    sel = questdlg({study.Data.FileName}, 'Replace old data file(s)?', 'Yes', 'No', 'No');
+    
+    if (isempty(replaceoldfiles))
+        sel = questdlg({study.Data.FileName}, 'Replace old data file(s)?', 'Yes', 'No', 'No');
+    elseif (replaceoldfiles)
+        sel = 'Yes';
+    else
+        sel = 'No';
+    end
     
     if (strcmp(sel, 'Yes'))
         for i = 1:n
@@ -52,10 +79,11 @@ if (nargin < 8 || isempty(name))
     name = sprintf('EEG/MAT_%d', n+1);
 end
 
-datastruct = struct('FileName', sprintf('COREG/Implantation/coreg_data_%d.mat', n+1), 'Comment', name, 'DataType', 'recordings', 'BadTrial', 0);
+datastruct = struct('FileName', sprintf('COREG/%s/coreg_data_%d.mat', study.Name, n+1), 'Comment', name, 'DataType', 'recordings', 'BadTrial', 0);
 
 datatemp = db_template('datamat');
 datatemp.ChannelFlag = ones(study.Channel.nbChannels, 1);
+datatemp.ChannelFlag(all(isnan(data), 2)) = -1;
 datatemp.Comment = name;
 datatemp.Device = 'Unknown';
 datatemp.Time = timevec;

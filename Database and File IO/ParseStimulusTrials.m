@@ -134,6 +134,9 @@ for i = 1:length(ttlwidths)
     measured = widths(1:min([length(widths), length(intended)]));
     if (all(abs(intended - measured) < 2))
         break;
+    elseif (all(abs(intended(1:end-1) - measured(1:end-1)) < 2)) % in case end TTL gets cut off?
+        risingedge = risingedge(1:end-1);
+        break;
     end
 end
 

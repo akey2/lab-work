@@ -1,3 +1,4 @@
+%%% Dim = time x recording channel x stimulation channel x stimulation amplitude x stimulation pulse width
 function [erps, t, epochs] = ComputeERP(subj, fname, modality, freq, window, montage) 
 
 % parameters:
@@ -9,9 +10,9 @@ function [erps, t, epochs] = ComputeERP(subj, fname, modality, freq, window, mon
 % montage = 'bipolar'; % 'common', 'bipolar', or cell array of 2xN matrices (one per modality) 
 
 % adjust parameters as necessary:
-% if (~iscell(fname))
-%     fname = {fname};
-% end
+if (~iscell(fname))
+    fname = {fname};
+end
 if (~iscell(modality))
     modality = {modality};
 end
@@ -22,51 +23,78 @@ end
 % subject/file information:
 info = getInfoFile;
 sinfo = info(strcmp({info.ID}, subj));
-finfo = sinfo.File(strcmp({sinfo.File.FileName}, fname));
 
-% load and select data:
-[data, fi] = LoadDatav2(subj, fname);
+data = cell(length(modality), length(fname));
+trials = cell(1,length(fname));
+for f = 1:length(fname)
 
-datasel = cell(1,length(modality));
-badchans = cell(1,length(modality));
+    finfo = sinfo.File(strcmp({sinfo.File.FileName}, fname{f}));
+    
+    % load and select data:
+    [dataf, fi] = LoadDatav2(subj, fname{f});
+    
+    datasel = cell(1,length(modality));
+    badchans = cell(1,length(modality));
+    for i = 1:length(modality)
+        modchans = finfo.([upper(modality{i}), 'Chans']);
+        
+        datasel{i} = dataf(modchans,:);
+        badchans{i} = finfo.(['Bad', upper(modality{i}), 'Contacts']);
+        
+        if (ischar(montage{i}) && strcmpi(montage{i}, 'common'))
+            montage{i} = [1:length(modchans); zeros(1,length(modchans))];
+        elseif (ischar(montage{i}) && strcmpi(montage{i}, 'bipolar'))
+            montage{i} = [1:length(modchans)-1; 2:length(modchans)];
+        end
+    end
+    dataf = datasel;
+    
+    % preprocess data:
+    for i = 1:length(dataf)
+        [dataf{i}, ~] = PreProcessData(dataf{i}, freq, finfo.SampleRate, [], montage{i}, badchans{i});
+    end
+    data(:,f) = dataf;
+    
+    % get stimulation info:
+    trialsf = ParseStimulusTrials(fi);
+    
+    % remove 2nd pulse if stimuli are biphasic
+    if (size(trialsf(1).StimAmp, 1) > 1)
+        for i = 1:length(trialsf)
+            trialsf(i).StimWidth_ms(2:end,:) = [];
+            trialsf(i).StimAmp(2:end,:) = [];
+        end
+    end
+    trials{f} = trialsf;
+end
+
+%  if multiple files:
+
+
+% adjust stimulus times and concatenate data and trials across files
 for i = 1:length(modality)
-    modchans = finfo.([upper(modality{i}), 'Chans']);
-    
-    datasel{i} = data(modchans,:);
-    badchans{i} = finfo.(['Bad', upper(modality{i}), 'Contacts']);
-    
-    if (ischar(montage{i}) && strcmpi(montage{i}, 'common'))
-        montage{i} = [1:length(modchans); zeros(1,length(modchans))];
-    elseif (ischar(montage{i}) && strcmpi(montage{i}, 'bipolar'))
-        montage{i} = [1:length(modchans)-1; 2:length(modchans)];
+    for j = 2:length(fname)
+        x = num2cell([trials{j}.StimLoc_sample] + sum(cellfun(@length, data(i,1:j-1))));
+        [trials{j}.StimLoc_sample] = x{:};
     end
+    data{i,1} = [data{i,:}];
 end
-data = datasel;
-
-% preprocess data:
-for i = 1:length(data)
-    [data{i}, ~] = PreProcessData(data{i}, freq, finfo.SampleRate, [], montage{i}, badchans{i});
-end
-
-% get stimulation info:
-trials = ParseStimulusTrials(fi);
-
-% remove 2nd pulse if stimuli are biphasic
-if (size(trials(1).StimAmp, 1) > 1)
-    for i = 1:length(trials)
-        trials(i).StimWidth_ms(2:end,:) = [];
-        trials(i).StimAmp(2:end,:) = [];
-    end
-end
+data = data(:,1)';
+trials = cell2mat(trials);
 
 % determine unique stimulation conditions: stim channels, amplitude/polarity, pulse width
 stimchans = unique(cell2mat(arrayfun(@(x) abs(x.StimAmp) == max(abs(x.StimAmp)), trials, 'uni', 0)'), 'rows');
 [~, order] = sort(stimchans*(1:size(stimchans,2))' + (sum(stimchans,2)-1));
 stimchans = stimchans(order,:);
 
-stimamps = unique(cell2mat(arrayfun(@(x) max(abs(x.StimAmp)), trials, 'uni', 0)'));
+trialstimchans = arrayfun(@(x) find(all(stimchans==(abs(x.StimAmp)==max(abs(x.StimAmp))),2)), trials);
 
-stimwidths = unique([trials.StimWidth_ms]);
+% round to nearest 50 uA/mV to avoid near duplicate values:
+trialstimamps = round(arrayfun(@(x,y) sum(x.StimAmp.*stimchans(y,:)), trials, trialstimchans)/50)*50;
+stimamps = unique(abs(trialstimamps));
+    
+trialstimwidths = arrayfun(@(x,y) max(x.StimWidth_ms.*stimchans(y,:)), trials, trialstimchans);
+stimwidths = unique(trialstimwidths);
 
 % compute ERPs for each unique condition:
 erps = cell(size(data));
@@ -79,17 +107,23 @@ for i = 1:length(data)
     
     for j = 1:size(stimchans, 1)
         
-        jidx = all(cell2mat(arrayfun(@(x) abs(x.StimAmp) == max(abs(x.StimAmp)), trials, 'uni', 0)') == stimchans(j,:), 2);
+%         jidx = all(cell2mat(arrayfun(@(x) abs(x.StimAmp) == max(abs(x.StimAmp)), trials, 'uni', 0)') == stimchans(j,:), 2);
+        jidx = trialstimchans == j;
         trialsj = trials(jidx);
+        trialstimampsj = trialstimamps(jidx);
+        trialstimwidthsj = trialstimwidths(jidx);
         
         for k = 1:length(stimamps)
             
-            kidx = cell2mat(arrayfun(@(x) max(abs(x.StimAmp)), trialsj, 'uni', 0)') == stimamps(k);
+%             kidx = cell2mat(arrayfun(@(x) max(abs(x.StimAmp)), trialsj, 'uni', 0)') == stimamps(k);
+            kidx = abs(trialstimampsj) == stimamps(k);
             trialsjk = trialsj(kidx);
+            trialstimwidthsjk = trialstimwidthsj(kidx);
             
             for m = 1:length(stimwidths)
                 
-                midx = [trialsjk.StimWidth_ms] == stimwidths(m);
+%                 midx = [trialsjk.StimWidth_ms] == stimwidths(m);
+                midx = trialstimwidthsjk == stimwidths(m);
                 trialsjkm = trialsjk(midx);
                 
                 pol = cell2mat(arrayfun(@(x) extremum(x.StimAmp), trialsjkm, 'uni', 0)') > 0;

@@ -24,6 +24,10 @@ if (size(data,1) > size(data,2)) % flip so columns are samples
     tflag = true;
 end
 
+% pad data with NaNs for edge cases:
+data = [nan(size(data,1), abs(window(1))), data, nan(size(data,1), window(2))];
+times = times + abs(window(1));
+
 epochs = zeros(size(data,1), window(2) - window(1) + 1, length(times));
 for i = 1:length(times)
     epochs(:,:,i) = data(:, times(i) + (window(1):window(2)));
