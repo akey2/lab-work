@@ -1,4 +1,4 @@
-function badsubs = BrainstormCoregisterChannels(studyids, studyprefix, modality, bipolar)
+function [badsubs, coregchaninfo] = BrainstormCoregisterChannels(studyids, studyprefix, modality, bipolar)
 
 % %% User settings:
 % 
@@ -205,3 +205,5 @@ bst_save(coregchanfile, chanstruct, 'v7');
 
 % Reload all studies:
 db_reload_studies(1:bst_get('StudyCount'));
+
+coregchaninfo = chanstruct;

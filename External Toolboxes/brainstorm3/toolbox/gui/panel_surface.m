@@ -1896,11 +1896,35 @@ function TessInfo = ComputeScalpInterpolation(iDS, iFig, TessInfo)
                 otherwise,        excludeParam = 0;
             end
             nbNeigh = 4;
-            TessInfo.DataWmat = bst_shepards(Vertices, chan_loc, nbNeigh, excludeParam);
+%             TessInfo.DataWmat = bst_shepards(Vertices, chan_loc, nbNeigh, excludeParam);
         end
     end
     % Set data for current time frame
-    TessInfo.Data = TessInfo.DataWmat * TessInfo.Data;
+%     TessInfo.Data = TessInfo.DataWmat * TessInfo.Data;
+
+    [I, dist] = bst_nearest(chan_loc, Vertices, size(chan_loc,1), 1);
+    nearidxs = dist <= 0.01;
+    keepidxs = any(nearidxs,2);
+    
+    Vq = zeros(size(Vertices,1),1);
+    Vq(keepidxs) = arrayfun(@(x) mean(TessInfo.Data(I(x,nearidxs(x,:))),'omitnan'), find(keepidxs));
+    TessInfo.Data = Vq;
+
+
+% % %     [~,dist] = bst_nearest(chan_loc, Vertices, 1, 1);
+% % % 
+% % %     nearidxs = dist <= .015;
+% % % %     nearidxs = true(size(Vertices,1),1);
+% % % 
+% % %     Vq = griddata(chan_loc(:,1), chan_loc(:,2), chan_loc(:,3), TessInfo.Data, Vertices(nearidxs,1), Vertices(nearidxs,2), Vertices(nearidxs,3), 'nearest');
+% % % 
+% % %     vertdata = zeros(size(Vertices,1),1);
+% % %     vertdata(nearidxs) = Vq;
+% % %     vertdata(isnan(vertdata)) = 0;
+% % % 
+% % %     TessInfo.Data = vertdata;
+
+
     % Store minimum and maximum of displayed data
     TessInfo.DataMinMax = [min(TessInfo.Data(:)),  max(TessInfo.Data(:))];
 end

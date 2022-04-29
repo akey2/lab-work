@@ -129,6 +129,9 @@ switch tasktype
                 samplerate = params{pidx*2};
                 
                 resttime = d.Session.RestTime;
+                
+%                 figure; stem(taskmarkers(1:2:end)/(samplerate/1000), ones(1,length(taskmarkers)/2));
+%                 hold on; stem(taskmarkers(2:2:end)/(samplerate/1000), ones(1,length(taskmarkers)/2));
             end
             
             numreps = length(d.Session.Block);
@@ -306,6 +309,9 @@ switch tasktype
                 assert(~isempty(pidx), 'Go/No-Go v4: Please provide a sample rate: ''samplerate''');
                 samplerate = params{pidx*2};
                 
+%                 figure; stem(taskmarkers(1:2:end)/(samplerate/1000), ones(1,length(taskmarkers)/2));
+%                 hold on; stem(taskmarkers(2:2:end)/(samplerate/1000), ones(1,length(taskmarkers)/2));
+%                 
                 [ttlwidths, idx] = sort(taskmarkers(2:2:end) - taskmarkers(1:2:end));
                 assert(all(ttlwidths(1:numreps) < .5*d.Session.StimTime*samplerate/1000), 'Go/No-Go v4: Can''t find rest interval TTL markers');
                 restperiods = sort(taskmarkers((idx(1:numreps)-1)*2+1) + [zeros(numreps,1), (d.Session.RestTime*samplerate/1000)*ones(numreps,1)], 1);
@@ -316,7 +322,7 @@ switch tasktype
             
             badtrials = false(1, length(trial));  
             
-            for i = 1:length(trial)
+            for i = 1:45%length(trial)
                 trial(i).Condition = dtrials(i).Condition;
                 trial(i).Stimulus = dtrials(i).Letter;
                 trial(i).Response = dtrials(i).RESP == "True";
@@ -336,6 +342,15 @@ switch tasktype
                         trial(i).RT = dtrials(i).StimulusDisplay_RT - dtrials(i).ISI;
                         if (trial(i).RT < 0)
                             badtrials(i) = true;    % I don't know why this happens, so just cut out this trial...
+                                                    %%% -- just found the
+                                                    %%% reason for this.
+                                                    %%% subject can press a
+                                                    %%% button during the
+                                                    %%% fixation period
+                                                    %%% prior to the
+                                                    %%% stimulus and it
+                                                    %%% will be marked as a
+                                                    %%% response.
                         end
                         %                 else
                         %                     trial(i).RT = 0;
@@ -366,7 +381,7 @@ switch tasktype
         
         % Forgot to change the version number for the task, so we have to
         % differentiate based on the date:
-        if (datetime(d.SessionDate, 'InputFormat', 'MM-dd-yyyy') >= datetime('09-30-2020', 'InputFormat', 'MM-dd-yyyy'))
+        if (datetime(d.SessionDate, 'InputFormat', 'MM-dd-yyyy') >= datetime('08-01-2020', 'InputFormat', 'MM-dd-yyyy'))
             
             restperiods = [];
             dtrials = MergeStructs({d.Session.Block});
@@ -428,28 +443,61 @@ switch tasktype
             restperiods = [];
             dtrials = MergeStructs({d.Session.Block});
             trial = repmat(trial, 1, length(dtrials));
-            
+                        
             if (~taskonly)
-                pidx = find(strcmpi(params(1:2:end), 'targttlchan'));
-                assert(~isempty(pidx), 'DelayedReachV2: Please provide a Target Onset TTL Channel: ''targttlchan''');
-                taskmarkers = ttl{params{pidx*2}};
+                pidx = find(strcmpi(params(1:2:end), 'centerttlchan'));
+                assert(~isempty(pidx), 'DelayedReachV1: Please provide a Center Target Onset TTL Channel: ''centerttlchan''');
+                centermarkers = ttl{params{pidx*2}};
                 
-                pidx = find(strcmpi(params(1:2:end), 'hitttlchan'));
-                assert(~isempty(pidx), 'DelayedReachV2: Please provide a Target Hit TTL Channel: ''hitttlchan''');
-                hitmarkers = ttl{params{pidx*2}};
+                pidx = find(strcmpi(params(1:2:end), 'radialttlchan'));
+                assert(~isempty(pidx), 'DelayedReachV1: Please provide a Radial Target Onset TTL Channel: ''radialttlchan''');
+                radialmarkers = ttl{params{pidx*2}};
                 
                 pidx = find(strcmpi(params(1:2:end), 'samplerate'));
-                assert(~isempty(pidx), 'DelayedReachV2: Please provide a sample rate: ''samplerate''');
+                assert(~isempty(pidx), 'DelayedReachV1: Please provide a sample rate: ''samplerate''');
                 samplerate = params{pidx*2};
+                
+                assert(length(centermarkers)/2 - length(radialmarkers)/2 == sum([dtrials.SKIPTRIAL]=="True"), 'DelayedReachV1: Radial and Center target markers don''t match up');
+                assert(length(centermarkers)/2 == length(dtrials), 'DelayedReachV1: Trials and markers don''t match up');
+                
+                centermarkers = centermarkers(1:2:end);
                 
                 % centermarker: 100 ms pulse on center target onset (dashed radial target appears after delay)
                 % radialmarker: 100 ms pulse on radial target onset
+            end
+            
+            badtrials = false(1, length(trial));
                 
-                % hitmarkers: goes high when entering a target, low when exiting
+            % NOTE: there's a bug in this version of the task, where the radialmarker TTL never resets after a
+            % skipped trial
+            
+            for i = 1:length(dtrials)
+                trial(i).Target = dtrials(i).Target;
+                trial(i).Delay = dtrials(i).DELAY;
+                trial(i).ACC = dtrials(i).ACC == "True";
+                trial(i).ACC_Delay = dtrials(i).SKIPTRIAL == "False";
                 
-                % NOTE: there's a bug in this version of the task, where the radialmarker TTL never resets after a
-                % skipped trial, if it happens within the 50 ms pulse after center target onset
-                
+                if (~taskonly)
+                    
+                    if (trial(i).ACC_Delay)
+                        
+                        trial(i).CenterOnsetTime = centermarkers(i);
+                        
+                        idx = find(radialmarkers > centermarkers(i), 1);
+                        if (i > 1 && ~trial(i-1).ACC_Delay)
+                            trial(i).GoCueTime = radialmarkers(idx) - 100*samplerate/1000; % account for bug noted above
+                        else
+                            trial(i).GoCueTime = radialmarkers(idx);
+                        end
+                        
+                        trial(i).TargetOnsetTime = trial(i).GoCueTime - trial(i).Delay*samplerate/1000;
+                        
+                    else
+                        
+                        trial(i).CenterOnsetTime = centermarkers(i);
+                    end
+                    
+                end
             end
             
         end

@@ -11,7 +11,7 @@
 
 function epochs = EpochData(data, times, window, samplerate)
 
-times(isnan(times)) = []; % remove NaNs
+times(isnan(times) | times == 0) = []; % remove NaNs or zeros
 
 if (nargin > 3 && ~isempty(samplerate)) % assume times/window are in msec
     window = window*samplerate/1000;
