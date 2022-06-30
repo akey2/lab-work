@@ -16,11 +16,11 @@ end
 
 subjids = arrayfun(@(x) sprintf('%s%03d', studyprefix, x), studyids, 'uni', 0);
 
-if (~iscell(coregchans) && coregchans)
+if (islogical(coregchans) && coregchans)
     badsubs = BrainstormCoregisterChannels(studyids, studyprefix, modality, bipolar);
        
     coregsubs = setdiff(subjids, badsubs);
-elseif (iscell(coregchans))
+elseif (iscell(coregchans) || isstring(coregchans))
     badsubs = subjids(~ismember(subjids, coregchans));
     
     coregsubs = coregchans;

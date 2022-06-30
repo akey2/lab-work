@@ -17,13 +17,13 @@
 
 function f = SpiderPlot(data, grouplabels, pointlabels, pointunits, ringlim, titlestring, setpoint, drawlabels)
 
-if (nargin < 1)
+if (nargin < 2)
     grouplabels = [];
 end
-if (nargin < 2)
+if (nargin < 3)
     pointlabels = '';
 end
-if (nargin < 3)
+if (nargin < 4)
     pointunits = '';
 end
 if (nargin < 5)
@@ -128,7 +128,7 @@ end
 % draw ring labels (so they're on top):
 if (~isempty(drawlabels) && drawlabels)
     for i = 0:nringsteps
-        label = sprintf('%.1f %s', r(1) + i*(r(2) - r(1))/nringsteps, pointunits);
+        label = sprintf('%.2f %s', r(1) + i*(r(2) - r(1))/nringsteps, pointunits);
         text((i*1/nringsteps - .1)*cos(baseline-pi/3), (i*1/nringsteps - .1)*sin(baseline-pi/3), label, 'FontWeight', 'bold');
     end
 end
