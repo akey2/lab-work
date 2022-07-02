@@ -1,6 +1,15 @@
+% data: NxP matrix (N channels, P data points)
+% filtband: filter cutoff frequencies in Hz
+%               - bandpass: [low, high]
+%               - lowpass: -high
+%               - highpass: low
+% samplerate: original data sampling rate in Hz
+% newrate: desired output sampling rate in Hz
 % montage: 2xN matrix (N channels)
 %           - row 1: target channel
 %           - row 2: reference channel (0 = average)
+%           - example (bipolar montage): [1, 2, 3, 4; 2, 3, 4, 5]
+% badchannels: [1xM] vector of known bad channels (not contacts)
 function [D, newrate] = PreProcessData(data, filtband, samplerate, newrate, montage, badchannels)
 
 if (nargin < 4)
