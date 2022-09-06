@@ -7,10 +7,14 @@ if (nargin < 4 || isempty(infoonly))
     infoonly = false;
 end
 
+subjID = char(subjID);
+filename = char(filename);
+path = char(path);
+
 localdatadir = getLocalDir();
 
 if (~contains(filename, '.'))
-    filename = [filename, '.vhdr'];
+    filename = strcat(filename, '.vhdr');
 end
 
 % Check for local directory first:
@@ -19,14 +23,16 @@ localf = fullfile(localdir, filename);
 if (exist(localdir, 'dir'))
     % There is a local data directory for this subject, check for file there
     
-    if (exist([localf(1:find(localf == '.', 1, 'last')), 'mat'], 'file'))
+    matfile = strcat(localf(1:find(localf == '.', 1, 'last')), 'mat');
+    
+    if (exist(matfile, 'file'))
         % File is already extracted in local data directory - load it in
         
         if (infoonly)
-            load([localf(1:find(localf == '.', 1, 'last')), 'mat'], 'FileInfo');
+            load(matfile, 'FileInfo');
             Data = [];
         else
-            load([localf(1:find(localf == '.', 1, 'last')), 'mat'], 'Data', 'FileInfo');
+            load(matfile, 'Data', 'FileInfo');
             Data = double(Data);
         end
         return;
@@ -50,7 +56,8 @@ if (exist(localdir, 'dir'))
             end
         end
         
-        save([localf(1:find(localf == '.', 1, 'last')), 'mat'], 'Data', 'FileInfo');
+        matfile = strcat(localf(1:find(localf == '.', 1, 'last')), 'mat');
+        save(matfile, 'Data', 'FileInfo');
         
         Data = double(Data);
         return;
@@ -67,13 +74,16 @@ if (~isempty(path))
     % supplied path
     
     remotef = fullfile(path, filename);
-    if (exist([remotef(1:find(remotef == '.', 1, 'last')), 'mat'], 'file'))
+    remotematfile = strcat(remotef(1:find(remotef == '.', 1, 'last')), 'mat');
+    localmatfile = strcat(localf(1:find(localf == '.', 1, 'last')), 'mat');
+    
+    if (exist(remotematfile, 'file'))
         % File is already extracted in remote directory, load in and save
         % to local directory
         
-        load([remotef(1:find(remotef == '.', 1, 'last')), 'mat'], 'Data', 'FileInfo');
+        load(remotematfile, 'Data', 'FileInfo');
         
-        save([localf(1:find(localf == '.', 1, 'last')), 'mat'], 'Data', 'FileInfo');
+        save(localmatfile, 'Data', 'FileInfo');
         
         Data = double(Data);
         return;
@@ -97,7 +107,7 @@ if (~isempty(path))
             end
         end
         
-        save([localf(1:find(localf == '.', 1, 'last')), 'mat'], 'Data', 'FileInfo');
+        save(localmatfile, 'Data', 'FileInfo');
         
         Data = double(Data);
         return;
@@ -111,13 +121,16 @@ else
     [filename, path] = uigetfile(fullfile(getRemoteDir(), filename), str);
     
     remotef = fullfile(path, filename);
-    if (exist([remotef(1:find(remotef == '.', 1, 'last')), 'mat'], 'file'))
+    remotematfile = strcat(remotef(1:find(remotef == '.', 1, 'last')), 'mat');
+    localmatfile = strcat(localf(1:find(localf == '.', 1, 'last')), 'mat');
+    
+    if (exist(remotematfile, 'file'))
         % File is already extracted in remote directory, load in and save
         % to local directory
         
-        load([remotef(1:find(remotef == '.', 1, 'last')), 'mat'], 'Data', 'FileInfo');
+        load(remotematfile, 'Data', 'FileInfo');
         
-        save([localf(1:find(localf == '.', 1, 'last')), 'mat'], 'Data', 'FileInfo');
+        save(localmatfile, 'Data', 'FileInfo');
         
         Data = double(Data);
         return;
@@ -141,7 +154,7 @@ else
             end
         end
         
-        save([localf(1:find(localf == '.', 1, 'last')), 'mat'], 'Data', 'FileInfo');
+        save(localmatfile, 'Data', 'FileInfo');
         
         Data = double(Data);
         return;

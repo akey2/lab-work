@@ -1,5 +1,5 @@
 %%% Dim = time x recording channel x stimulation channel x stimulation amplitude x stimulation pulse width
-function [erps, t, epochs] = ComputeERP(subj, fname, modality, freq, window, montage) 
+function [erps, t, epochs] = ComputeERP(subj, fname, modality, freq, window, montage, timeframe, singlecondition) 
 
 % parameters:
 % subj = 'BB004';
@@ -19,6 +19,14 @@ end
 if (~iscell(montage))
     montage = repelem({montage}, length(modality));
 end
+if (nargin < 7)
+    timeframe = cell(1,length(fname));
+elseif (~iscell(timeframe))
+    timeframe = repelem({timeframe}, length(fname));
+end
+if (nargin < 8 || isempty(singlecondition))
+    singlecondition = false;
+end
 
 % subject/file information:
 info = getInfoFile;
@@ -37,7 +45,7 @@ for f = 1:length(fname)
     badchans = cell(1,length(modality));
     for i = 1:length(modality)
         modchans = finfo.([upper(modality{i}), 'Chans']);
-        
+               
         datasel{i} = dataf(modchans,:);
         badchans{i} = finfo.(['Bad', upper(modality{i}), 'Contacts']);
         
@@ -56,7 +64,12 @@ for f = 1:length(fname)
     data(:,f) = dataf;
     
     % get stimulation info:
-    trialsf = ParseStimulusTrials(fi);
+    trialsf = ParseStimulusTrials(fi, [], true);
+    
+    if (~isempty(timeframe{f}))
+        trialsf = trialsf([trialsf.StimLoc_sample] >= timeframe{f}(1)*finfo.SampleRate + 1 & ...
+                          [trialsf.StimLoc_sample] <= timeframe{f}(2)*finfo.SampleRate);
+    end
     
     % remove 2nd pulse if stimuli are biphasic
     if (size(trialsf(1).StimAmp, 1) > 1)
@@ -83,18 +96,24 @@ data = data(:,1)';
 trials = cell2mat(trials);
 
 % determine unique stimulation conditions: stim channels, amplitude/polarity, pulse width
-stimchans = unique(cell2mat(arrayfun(@(x) abs(x.StimAmp) == max(abs(x.StimAmp)), trials, 'uni', 0)'), 'rows');
-[~, order] = sort(stimchans*(1:size(stimchans,2))' + (sum(stimchans,2)-1));
-stimchans = stimchans(order,:);
-
-trialstimchans = arrayfun(@(x) find(all(stimchans==(abs(x.StimAmp)==max(abs(x.StimAmp))),2)), trials);
-
-% round to nearest 50 uA/mV to avoid near duplicate values:
-trialstimamps = round(arrayfun(@(x,y) sum(x.StimAmp.*stimchans(y,:)), trials, trialstimchans)/50)*50;
-stimamps = unique(abs(trialstimamps));
+if (~singlecondition)
+    stimchans = unique(cell2mat(arrayfun(@(x) abs(x.StimAmp) == max(abs(x.StimAmp)), trials, 'uni', 0)'), 'rows');
+    [~, order] = sort(stimchans*(1:size(stimchans,2))' + (sum(stimchans,2)-1));
+    stimchans = stimchans(order,:);
     
-trialstimwidths = arrayfun(@(x,y) max(x.StimWidth_ms.*stimchans(y,:)), trials, trialstimchans);
-stimwidths = unique(trialstimwidths);
+    trialstimchans = arrayfun(@(x) find(all(stimchans==(abs(x.StimAmp)==max(abs(x.StimAmp))),2)), trials);
+    
+    % round to nearest 50 uA/mV to avoid near duplicate values:
+    trialstimamps = round(arrayfun(@(x,y) sum(x.StimAmp.*stimchans(y,:)), trials, trialstimchans)/50)*50;
+    stimamps = unique(abs(trialstimamps));
+    
+    trialstimwidths = arrayfun(@(x,y) max(x.StimWidth_ms.*stimchans(y,:)), trials, trialstimchans);
+    stimwidths = unique(trialstimwidths);
+else
+    stimchans = 1;
+    stimamps = 1;
+    stimwidths = 1;
+end
 
 % compute ERPs for each unique condition:
 erps = cell(size(data));
@@ -108,26 +127,34 @@ for i = 1:length(data)
     for j = 1:size(stimchans, 1)
         
 %         jidx = all(cell2mat(arrayfun(@(x) abs(x.StimAmp) == max(abs(x.StimAmp)), trials, 'uni', 0)') == stimchans(j,:), 2);
-        jidx = trialstimchans == j;
-        trialsj = trials(jidx);
-        trialstimampsj = trialstimamps(jidx);
-        trialstimwidthsj = trialstimwidths(jidx);
+        if (~singlecondition)
+            jidx = trialstimchans == j;
+            trialsj = trials(jidx);
+            trialstimampsj = trialstimamps(jidx);
+            trialstimwidthsj = trialstimwidths(jidx);
+        end
         
         for k = 1:length(stimamps)
             
 %             kidx = cell2mat(arrayfun(@(x) max(abs(x.StimAmp)), trialsj, 'uni', 0)') == stimamps(k);
-            kidx = abs(trialstimampsj) == stimamps(k);
-            trialsjk = trialsj(kidx);
-            trialstimwidthsjk = trialstimwidthsj(kidx);
+            if (~singlecondition)
+                kidx = abs(trialstimampsj) == stimamps(k);
+                trialsjk = trialsj(kidx);
+                trialstimwidthsjk = trialstimwidthsj(kidx);
+            end
             
             for m = 1:length(stimwidths)
                 
 %                 midx = [trialsjk.StimWidth_ms] == stimwidths(m);
-                midx = trialstimwidthsjk == stimwidths(m);
-                trialsjkm = trialsjk(midx);
-                
-                pol = cell2mat(arrayfun(@(x) extremum(x.StimAmp), trialsjkm, 'uni', 0)') > 0;
-         
+                if (~singlecondition)
+                    midx = trialstimwidthsjk == stimwidths(m);
+                    trialsjkm = trialsjk(midx);
+                    pol = cell2mat(arrayfun(@(x) extremum(x.StimAmp), trialsjkm, 'uni', 0)') > 0;
+                else
+                    trialsjkm = trials;
+                    pol = true(1,length(trials));
+                end
+                        
                 % collect data epochs:
                 epochs = EpochData(data{i}, [trialsjkm.StimLoc_sample], window*finfo.SampleRate/1000);
                 
