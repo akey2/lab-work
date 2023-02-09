@@ -1,3 +1,6 @@
+% data can be either a vector or matrix
+%   - if a vector [1 x length(x)], must also include 'err" [1 x length(x)]
+%   - if a matrix [length(x) x N], repetitions in dim 2, x points in dim 1
 function [hmean, herr] = ShadedErrorBars(ax, x, data, err)
 
 if (isempty(ax))

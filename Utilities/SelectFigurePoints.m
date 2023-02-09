@@ -22,7 +22,7 @@ function [points, baselines] = SelectFigurePoints(fig)
     lines = [];
     for i = 1:length(axes)
         hold(axes(i), 'on');
-        lines = [lines; axes.Children(arrayfun(@(x) isa(x, 'matlab.graphics.chart.primitive.Line'), axes.Children))]; %#ok
+        lines = [lines; axes.Children(arrayfun(@(x) isa(x, 'matlab.graphics.chart.primitive.Line') | isa(x, 'matlab.graphics.chart.primitive.Stair'), axes.Children))]; %#ok
     end
     
     % attach callback function to each line object:

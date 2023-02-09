@@ -65,7 +65,12 @@ chanstruct.IntraElectrodes = struct('Name', [], ...
 
 %% Load and convert all subjects' channels to ICBM152 space:
 
-subjids = arrayfun(@(x) sprintf('%s%03d', studyprefix, x), studyids, 'uni', 0);
+if (~isempty(studyprefix))
+    subjids = arrayfun(@(x) sprintf('%s%03d', studyprefix, x), studyids, 'uni', 0);
+else
+    subjids = studyids;
+end
+% subjids = arrayfun(@(x) sprintf('%s%03d', studyprefix, x), studyids, 'uni', 0);
 
 % Currently loaded protocol:
 prot = bst_get('ProtocolInfo'); 
@@ -190,6 +195,17 @@ end
 chanstruct.IntraElectrodes(badsubs) = [];
 
 badsubs = subjids(badsubs);
+
+%% Project electrodes onto cortical surface:
+
+[NewOrient, NewLoc] = panel_ieeg('GetChannelNormal', subs.Subject(coregsubidx), [chanstruct.Channel.Loc]', 'cortexmask', false);
+
+% Replace original channel positions
+if ~isempty(NewOrient)
+    for i = 1:length(chanstruct.Channel)
+        chanstruct.Channel(i).Loc = NewLoc(i,:)';
+    end
+end
 
 %% Update COREG channel data:
 

@@ -10,7 +10,7 @@ end
 
 fb = cwtfilterbank('SignalLength', size(data,2), 'SamplingFrequency', varargin{2:end});
 
-wt = zeros(length(fb.BPfrequencies), size(data,2), size(data,1));
+wt = nan(length(fb.BPfrequencies), size(data,2), size(data,1));
 for i = 1:size(data,1)
     if (all(isnan(data(i,:))))
         continue;

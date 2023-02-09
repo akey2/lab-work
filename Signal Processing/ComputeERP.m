@@ -1,5 +1,5 @@
 %%% Dim = time x recording channel x stimulation channel x stimulation amplitude x stimulation pulse width
-function [erps, t, epochs] = ComputeERP(subj, fname, modality, freq, window, montage, timeframe, singlecondition) 
+function [erps, t, epochs] = ComputeERP(subj, fname, modality, freq, window, montage, timeframe, singlecondition, datamat) 
 
 % parameters:
 % subj = 'BB004';
@@ -27,6 +27,9 @@ end
 if (nargin < 8 || isempty(singlecondition))
     singlecondition = false;
 end
+if (nargin < 9 || isempty(datamat))
+    datamat = {};
+end
 
 % subject/file information:
 info = getInfoFile;
@@ -39,7 +42,12 @@ for f = 1:length(fname)
     finfo = sinfo.File(strcmp({sinfo.File.FileName}, fname{f}));
     
     % load and select data:
-    [dataf, fi] = LoadDatav2(subj, fname{f});
+    if (isempty(datamat))
+        [dataf, fi] = LoadDatav2(subj, fname{f});
+    else
+        dataf = datamat{1,f};
+        fi = datamat{2, f};
+    end
     
     datasel = cell(1,length(modality));
     badchans = cell(1,length(modality));
@@ -64,7 +72,7 @@ for f = 1:length(fname)
     data(:,f) = dataf;
     
     % get stimulation info:
-    trialsf = ParseStimulusTrials(fi, [], true);
+    trialsf = ParseStimulusTrials(fi, [], singlecondition);
     
     if (~isempty(timeframe{f}))
         trialsf = trialsf([trialsf.StimLoc_sample] >= timeframe{f}(1)*finfo.SampleRate + 1 & ...
@@ -86,11 +94,21 @@ end
 
 % adjust stimulus times and concatenate data and trials across files
 for i = 1:length(modality)
-    for j = 2:length(fname)
+    data1 = zeros(size(data{1},1), sum(cellfun(@(x) size(x,2), data(i,:))));
+    for j = 1:length(fname)
+               
+        if (i == 1)
+            data1(:,1:size(data{i,1},2)) = data{i,1};
+            continue;
+        else
+            data1(:,sum(cellfun(@length, data(i,1:j-1))) + (1:size(data{i,1},2))) = data{i,j};
+        end
         x = num2cell([trials{j}.StimLoc_sample] + sum(cellfun(@length, data(i,1:j-1))));
         [trials{j}.StimLoc_sample] = x{:};
     end
-    data{i,1} = [data{i,:}];
+    
+    data{i,1} = data1;
+%     data{i,1} = [data{i,:}];
 end
 data = data(:,1)';
 trials = cell2mat(trials);

@@ -14,7 +14,11 @@ if (nargin < 9)
     replaceoldfiles = [];
 end
 
-subjids = arrayfun(@(x) sprintf('%s%03d', studyprefix, x), studyids, 'uni', 0);
+if (~isempty(studyprefix))
+    subjids = arrayfun(@(x) sprintf('%s%03d', studyprefix, x), studyids, 'uni', 0);
+else
+    subjids = studyids;
+end
 
 if (islogical(coregchans) && coregchans)
     badsubs = BrainstormCoregisterChannels(studyids, studyprefix, modality, bipolar);

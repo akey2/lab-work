@@ -1,4 +1,4 @@
-function INFO = getInfoFile()
+function INFO = getInfoFile(subject)
 
 file = getenv('INFOFILE');
 
@@ -12,5 +12,15 @@ if (isempty(file) || ~exist(file, 'file'))
 end
 
 load(file, 'INFO');
+
+if (nargin > 0)
+    idx = strcmp({INFO.ID}, subject);
+    if ~any(idx)
+        warning('Could not find requested subject');
+    else
+        INFO = INFO(idx);
+    end
+end
+
 % data = load(file);
 % INFO = data.INFO;
