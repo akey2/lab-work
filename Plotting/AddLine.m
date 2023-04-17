@@ -27,5 +27,7 @@ h = plot(ax, x, y, 'Color', color, 'LineStyle', style);
 ax.XLim = xlim;
 ax.YLim = ylim;
 
-ax.XLimMode = 'auto';
-ax.YLimMode = 'auto';
+if (~any(arrayfun(@(x) isa(x, 'matlab.graphics.primitive.Surface'), get(gca, 'Children'))))
+    ax.XLimMode = 'auto';
+    ax.YLimMode = 'auto';
+end

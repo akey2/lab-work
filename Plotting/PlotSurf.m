@@ -29,6 +29,8 @@ dy = y(end) - y(end-1);
 h1 = pcolor([x, x(end)+dx], [y, y(end)+dy], [c nan(size(c,1),1); nan(1,size(c,2)+1)]);
 h1.EdgeColor = 'none';
 
+% set(gca,'XTick', get(gca,'XTick')+dx/2, 'XTickLabel', get(gca,'XTickLabel'));
+
 if (~isempty(yscale))
    set(gca, 'YScale', yscale);
 end

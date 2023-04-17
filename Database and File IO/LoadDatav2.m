@@ -49,7 +49,7 @@ if (exist(localdir, 'dir'))
         FileInfo = rmfield(EEG, {'data', 'chanlocs', 'urevent'});
         
         FileInfo.stimfile = struct('fname', [], 'text', []);
-        if (any(strcmp({FileInfo.event.code}, 'Stimulus')))
+        if (any(strcmp({FileInfo.event.code}, 'Stimulus')) || any(strcmp({FileInfo.event.code}, 'Response')))
             [stimfile, stimpath] = uigetfile({'*.txt;*.dat'}, 'Select the associated stimulation file', localdir, 'MultiSelect', 'off');
             if (~isnumeric(stimfile))
                 FileInfo.stimfile = struct('fname', stimfile, 'text', fileread(fullfile(stimpath, stimfile)));
@@ -100,7 +100,7 @@ if (~isempty(path))
         FileInfo = rmfield(EEG, {'data', 'chanlocs', 'urevent'});
         
         FileInfo.stimfile = struct('fname', [], 'text', []);
-        if (any(strcmp({FileInfo.event.code}, 'Stimulus')))
+        if (any(strcmp({FileInfo.event.code}, 'Stimulus')) || any(strcmp({FileInfo.event.code}, 'Response')))
             [stimfile, stimpath] = uigetfile({'*.txt;*.dat'}, 'Select the associated stimulation file', path, 'MultiSelect', 'off');
             if (~isnumeric(stimfile))
                 FileInfo.stimfile = struct('fname', stimfile, 'text', fileread(fullfile(stimpath, stimfile)));
@@ -147,7 +147,7 @@ else
         FileInfo = rmfield(EEG, {'data', 'chanlocs', 'urevent'});
         
         FileInfo.stimfile = struct('fname', [], 'text', []);
-        if (any(strcmp({FileInfo.event.code}, 'Stimulus')))
+        if (any(strcmp({FileInfo.event.code}, 'Stimulus')) || any(strcmp({FileInfo.event.code}, 'Response')))
             [stimfile, stimpath] = uigetfile({'*.txt;*.dat'}, 'Select the associated stimulation file', path, 'MultiSelect', 'off');
             if (~isnumeric(stimfile))
                 FileInfo.stimfile = struct('fname', stimfile, 'text', fileread(fullfile(stimpath, stimfile)));
