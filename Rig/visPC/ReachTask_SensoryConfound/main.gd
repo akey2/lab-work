@@ -3,9 +3,12 @@ extends Node
 var socket
 var udpthread
 var vistree
+var packetnum
 
 # Called when the node enters the scene tree for the first time.
 func _ready():
+	
+	packetnum = null
 	
 	vistree = get_node("VisScene").get_children()
 	
@@ -34,7 +37,13 @@ func _udp_recv_thread(userdata):
 	pass
 	
 func _parse_packet(packet:PackedByteArray):
-	var idx = 0
+	
+	var pnum = packet.decode_u32(0)   # 1st uint32 is a packet count
+	
+	if (packetnum != null && (packetnum + 1) != pnum):
+		print("We missed a packet")
+	
+	var idx = 4
 	while (idx < packet.size()):
 		var id = packet[idx]		 # id of resource to update
 		var property = packet[idx+1] # property to update
@@ -48,6 +57,12 @@ func _parse_packet(packet:PackedByteArray):
 			3:                          # color (3 uint8s)
 				vistree[id].set_color(packet[idx+2], packet[idx+3], packet[idx+4])
 				idx += 5
+			4:                          # scaling (1 uint8)
+				vistree[id].set_scaling(packet[idx+1]);
+				idx += 3
+			5:                          # fill (1 uint8)
+				vistree[id].set_filled(packet[idx+1]) as bool;
+				idx += 3
 			_:
 				print("Could not match requested property")
 	

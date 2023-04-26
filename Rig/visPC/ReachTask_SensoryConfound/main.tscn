@@ -1,10 +1,11 @@
-[gd_scene load_steps=6 format=3 uid="uid://ci7at6jcao8lr"]
+[gd_scene load_steps=7 format=3 uid="uid://ci7at6jcao8lr"]
 
 [ext_resource type="Script" path="res://main.gd" id="1_5r6sd"]
 [ext_resource type="Script" path="res://VisScene.gd" id="3_7cbib"]
 [ext_resource type="Script" path="res://HomeTarget.gd" id="3_kni6s"]
-[ext_resource type="Script" path="res://ReachTarget.gd" id="4_opg65"]
+[ext_resource type="Script" path="res://ReachTarget_left.gd" id="4_jhf4s"]
 [ext_resource type="Script" path="res://ReachTarget_right.gd" id="5_51xlm"]
+[ext_resource type="Script" path="res://Cursor.gd" id="6_siiul"]
 
 [node name="Main" type="Node"]
 script = ExtResource("1_5r6sd")
@@ -13,13 +14,17 @@ script = ExtResource("1_5r6sd")
 script = ExtResource("3_7cbib")
 
 [node name="HomeTarget" type="Node2D" parent="VisScene"]
-position = Vector2(942, 812)
+position = Vector2(800, 800)
 script = ExtResource("3_kni6s")
 
 [node name="ReachTarget_left" type="Node2D" parent="VisScene"]
-position = Vector2(570, 182)
-script = ExtResource("4_opg65")
+position = Vector2(400, 100)
+script = ExtResource("4_jhf4s")
 
 [node name="ReachTarget_right" type="Node2D" parent="VisScene"]
-position = Vector2(1278, 188)
+position = Vector2(1200, 100)
 script = ExtResource("5_51xlm")
+
+[node name="Cursor" type="Node2D" parent="VisScene"]
+position = Vector2(621, 578)
+script = ExtResource("6_siiul")
