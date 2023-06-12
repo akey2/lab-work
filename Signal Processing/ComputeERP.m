@@ -1,5 +1,5 @@
 %%% Dim = time x recording channel x stimulation channel x stimulation amplitude x stimulation pulse width
-function [erps, t, epochs] = ComputeERP(subj, fname, modality, freq, window, montage, timeframe, singlecondition, datamat) 
+function [erps, t, epochs, chanlabels] = ComputeERP(subj, fname, modality, freq, window, montage, timeframe, singlecondition, datamat) 
 
 % parameters:
 % subj = 'BB004';
@@ -52,15 +52,34 @@ for f = 1:length(fname)
     datasel = cell(1,length(modality));
     badchans = cell(1,length(modality));
     for i = 1:length(modality)
-        modchans = finfo.([upper(modality{i}), 'Chans']);
-               
-        datasel{i} = dataf(modchans,:);
-        badchans{i} = finfo.(['Bad', upper(modality{i}), 'Contacts']);
+        if (~strcmpi(modality{i}, 'eeg'))
+            modchans = finfo.([upper(modality{i}), 'Chans']);
+            modchanlabels = finfo.([upper(modality{i}), 'ElectrodeIDs']);
+
+            datasel{i} = dataf(modchans,:);
+            badchans{i} = finfo.(['Bad', upper(modality{i}), 'Contacts']);
+        else
+            modchans = find(~ismember(finfo.ChannelLabels(:,2), [finfo.ECOGElectrodeIDs, finfo.EMGElectrodeIDs, finfo.MISCElectrodeIDs]));
+            modchanlabels = finfo.ChannelLabels(modchans,2);
+
+            datasel{i} = dataf(modchans,:);
+            badchans{i} = [];
+
+        end
         
         if (ischar(montage{i}) && strcmpi(montage{i}, 'common'))
             montage{i} = [1:length(modchans); zeros(1,length(modchans))];
         elseif (ischar(montage{i}) && strcmpi(montage{i}, 'bipolar'))
             montage{i} = [1:length(modchans)-1; 2:length(modchans)];
+        end
+        
+        if (~isempty(montage{i}))
+            source = string(modchanlabels(montage{i}(1,:)));
+            ref = repmat("avg", length(source), 1);
+            ref(montage{i}(2,:) ~= 0) = string(modchanlabels(montage{i}(2,montage{i}(2,:) ~= 0)));
+            chanlabels{i} = compose("%s-%s", source, ref);
+        else
+            chanlabels{i} = modchanlabels;
         end
     end
     dataf = datasel;
@@ -193,6 +212,7 @@ end
     
 if (length(erps) == 1)
     erps = erps{1};
+    chanlabels = chanlabels{i};
 end
 
 t = linspace(window(1), window(2), (window(2) - window(1))*finfo.SampleRate/1000 + 1);
