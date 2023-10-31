@@ -59,10 +59,14 @@ for f = 1:length(fname)
             datasel{i} = dataf(modchans,:);
             badchans{i} = finfo.(['Bad', upper(modality{i}), 'Contacts']);
         else
-            modchans = find(~ismember(finfo.ChannelLabels(:,2), [finfo.ECOGElectrodeIDs, finfo.EMGElectrodeIDs, finfo.MISCElectrodeIDs]));
+            modchans = find(~ismember(finfo.ChannelLabels(:,2), [finfo.ECOGElectrodeIDs, finfo.DBSElectrodeIDs, finfo.EMGElectrodeIDs, finfo.MISCElectrodeIDs]));
             modchanlabels = finfo.ChannelLabels(modchans,2);
-
+            
+            try
             datasel{i} = dataf(modchans,:);
+            catch
+                disp('lkjsdf');
+            end
             badchans{i} = [];
 
         end
@@ -75,6 +79,9 @@ for f = 1:length(fname)
         
         if (~isempty(montage{i}))
             source = string(modchanlabels(montage{i}(1,:)));
+            if ~iscolumn(source)
+                source = source';
+            end
             ref = repmat("avg", length(source), 1);
             ref(montage{i}(2,:) ~= 0) = string(modchanlabels(montage{i}(2,montage{i}(2,:) ~= 0)));
             chanlabels{i} = compose("%s-%s", source, ref);

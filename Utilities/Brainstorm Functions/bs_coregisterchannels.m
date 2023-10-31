@@ -1,12 +1,24 @@
-function [badsubs, coregchaninfo] = BrainstormCoregisterChannels(studyids, studyprefix, modality, bipolar)
+%%% Coregisters a set of individual electrodes onto a single ICBM152
+%%% template brain.
+%%%
+%%% Input: 'subjects' - list of subject IDs to coregister. If empty, will
+%%%                     coregister all subjects available
+%%% Output: 'coreg_subs' - list of subject IDs which were successfully
+%%%                        coregistered
+%%%         'coreg_chans' - structure with info on each coregistered
+%%%                         electrode
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% %% User settings:
-% 
-% studyids = [3:4, 6:7, 10, 12:17, 20, 22:23, 25, 30:31, 33:35];
-% studyprefix = 'BI';
-% 
-% modality = 'ecog'; % ecog or eeg
-% bipolar = true;
+function [coreg_subs, coreg_chans] = bs_coregisterchannels(subjects)%, bipolar)
+
+if (nargin < 1)
+    subjects = [];
+end
+
+% if (nargin < 2)
+    bipolar = false;
+% end
+
 
 %% Channel structure template:
 
@@ -39,22 +51,11 @@ else
     numchans = 6;
 end
 
-switch (modality)
-    case 'ecog'
-        model = 'Ad-Tech';
-        color = [0 .8 0];
-        type = 'ECOG';
-    case 'eeg'
-        model = [];
-        color = [.8 0 0];
-        type = 'EEG';
-end
-
 chanstruct.IntraElectrodes = struct('Name', [], ...
-                                    'Type', type, ...
-                                    'Model', model, ...
+                                    'Type', 'ECOG', ...
+                                    'Model', 'Ad-Tech', ...
                                     'Loc', [], ...
-                                    'Color', color, ...
+                                    'Color', [0 .8 0], ...
                                     'ContactNumber', numchans, ...
                                     'ContactSpacing', .01, ...
                                     'ContactDiameter', .004, ...
@@ -64,13 +65,6 @@ chanstruct.IntraElectrodes = struct('Name', [], ...
                                     'Visible', 1);
 
 %% Load and convert all subjects' channels to ICBM152 space:
-
-if (~isempty(studyprefix))
-    subjids = arrayfun(@(x) sprintf('%s%03d', studyprefix, x), studyids, 'uni', 0);
-else
-    subjids = studyids;
-end
-% subjids = arrayfun(@(x) sprintf('%s%03d', studyprefix, x), studyids, 'uni', 0);
 
 % Currently loaded protocol:
 prot = bst_get('ProtocolInfo'); 
@@ -82,6 +76,16 @@ anatdir = prot.SUBJECTS;
 % All subjects included in the current protocol:
 subs = bst_get('ProtocolSubjects');
 subnames = {subs.Subject.Name};
+
+% if (~isempty(studyprefix))
+%     subjids = arrayfun(@(x) sprintf('%s%03d', studyprefix, x), subjects, 'uni', 0);
+if (~isempty(subjects))
+    subjids = subjects;
+else
+    subjids = setdiff(subnames, 'COREG'); % if no IDs provided, just coregister everything
+end
+% subjids = arrayfun(@(x) sprintf('%s%03d', studyprefix, x), studyids, 'uni', 0);
+
 
 % Find a subject called 'COREG' (expects this subject to already exist):
 coregsubidx = find(cellfun(@(x) strcmp(x, 'COREG'), subnames));
@@ -143,7 +147,7 @@ for i = 1:length(subjids)
     mridata = load(fullfile(anatdir, mrifilename));
 
     % Copy over IntraElectrodes field:
-    elecidx = find(strcmpi({chandata.IntraElectrodes.Name}, modality));
+    elecidx = find(strcmpi({chandata.IntraElectrodes.Name}, 'ecog'));
     if (isempty(elecidx))
         warning('No channel file with correct modality found for subject %s', subs.Subject(subidx).Name);
         badsubs = [badsubs, i];
@@ -189,7 +193,7 @@ for i = 1:length(subjids)
     % Add these channels:
     chanstruct.Channel = [chanstruct.Channel, temp]; %#ok
     
-    disp(subs.Subject(subidx).Name);
+%     disp(subs.Subject(subidx).Name);
 end
 
 chanstruct.IntraElectrodes(badsubs) = [];
@@ -222,4 +226,5 @@ bst_save(coregchanfile, chanstruct, 'v7');
 % Reload all studies:
 db_reload_studies(1:bst_get('StudyCount'));
 
-coregchaninfo = chanstruct;
+coreg_subs = setdiff(subjids, badsubs);
+coreg_chans = chanstruct;

@@ -1,6 +1,8 @@
-function [lat] = getTTLTimes(events)
+function [ttl_lat, button_lat] = getTTLTimes(events)
 
-lat = cell(1,8);
+button_lat = [events(strcmp({events.type}, 'BtnPressed')).latency];
+
+ttl_lat = cell(1,8);
 
 Sevents = events(strcmp({events.code}, 'Stimulus'));
 if (~isempty(Sevents))
@@ -16,7 +18,7 @@ if (~isempty(Sevents))
         t(1:2:end) = Slat(onsetidx);
         t(2:2:end) = Slat(offsetidx);
 
-        lat{4-i+1} = t;
+        ttl_lat{4-i+1} = t;
     end
 end
 
@@ -34,6 +36,6 @@ if (~isempty(Revents))
         t(1:2:end) = Rlat(onsetidx);
         t(2:2:end) = Rlat(offsetidx);
         
-        lat{8-i+1} = t;
+        ttl_lat{8-i+1} = t;
     end
 end

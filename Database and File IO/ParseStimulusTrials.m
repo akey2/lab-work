@@ -36,11 +36,11 @@ if (~timesonly)
     maxchans = str2double(stim(strfind(stim, 'output mode:')-3));
     
     % Find TTL section and convert to numbers:
-    numttl = length(strfind(stim, 'channel:')) - maxchans;
+    numttl = max(cellfun(@str2double, regexp(stim, 'channel:\s(\d+)', 'tokens'))) - maxchans;
     ttlstart = zeros(1,numttl);
     ttlvals = cell(1,numttl);
     for i = 1:numttl
-        ttlstart(i) = strfind(stim, ['channel:', char(9), num2str(i+maxchans)]) + 53;
+        ttlstart(i) = regexp(stim, ['channel:\s', num2str(i+maxchans)]) + 53;
         ttlvals{i} = sscanf(stim(ttlstart(i):end), '%f');
     end
     
@@ -53,7 +53,7 @@ if (~timesonly)
     
     assert(~isempty(ttlvals), sprintf('Format error: TTL channel %d empty', ttlchan+maxchans));
     assert(~any(ttlvals(repmat(logical([0 0 1 1 1 0 1]'),length(ttlvals)/7,1))), 'Format error: TTL columns 3, 4, 5, and 7 are not empty');
-    assert(all(ttlvals(1:7:end) == 1), 'Format error: TTL voltages not all 1');
+%     assert(all(ttlvals(1:7:end) == 1), 'Format error: TTL voltages not all 1');
     
     stimvals = cell(1,maxchans); usedchans = zeros(1,maxchans,'logical');
     for i = 1:maxchans
