@@ -9,15 +9,19 @@ end
 
 hold(ax, 'on');
 
-xlim = ax.XLim;
-ylim = ax.YLim;
+xlim = ax.XLim';
+ylim = ax.YLim';
+
+if (size(pos,1) > size(pos,2))
+    pos = pos';
+end
 
 if (contains('vertical', dim, 'IgnoreCase', true))
-    x = [pos, pos];
-    y = ylim;
+    x = [pos; pos];
+    y = repmat(ylim, 1, size(pos,2));
 elseif (contains('horizontal', dim, 'IgnoreCase', true))
-    x = xlim;
-    y = [pos, pos];
+    x = repmat(xlim, 1, size(pos,2));
+    y = [pos; pos];
 else
     error('Dimension can be either ''vertical'' or ''horizontal''');
 end
