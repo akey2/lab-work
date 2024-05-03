@@ -42,7 +42,7 @@ if (~exist('idxstart', 'var'))
 end
     
 % Find any restarts:
-runidxs = [idxstart-1, idxstart + strfind(x(idxstart+1:end), [0 0 1 0]) - 1, length(x)]; 
+runidxs = [idxstart-1, idxstart + strfind(x(idxstart+2:end), [1 0 2 0]), length(x)]; 
 
 % Iterate & fix each run:
 for i = 2:length(runidxs)

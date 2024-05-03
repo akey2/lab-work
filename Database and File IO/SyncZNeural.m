@@ -92,10 +92,10 @@ for i = 1:length(D)
     %breakfound = 0;
     
     % Find run restarts included in file:
-    runidxs = [1, find(etime(2:end)==0)+1, length(etime)+1];
+    runidxs = [1, find(etime(2:end)==1)+1, length(etime)+1];
     
     % Corresponding to which runs?
-    if (etime(1) ~= 0)
+    if (etime(1) ~= 1)
         skip = etime(1) <= lasttime;
         %nevruns = (runnum+skip):(runnum + skip + length(runidxs) - 2);
         nevruns = (runnum+(skip||breakfound)):(runnum + (skip || breakfound) + length(runidxs) - 2);
@@ -129,7 +129,7 @@ for i = 1:length(D)
             if (~isempty(etime) && start)
                 
                 if (etime(runidxs(idx)) <= Z(j).ExperimentTime(1) && etime(runidxs(idx+1)-1) >= Z(j).ExperimentTime(1))  % this file contains trial start
-                    Z(j).CerebusTimeStart = ctime(runidxs(idx)-1 + find(etime(runidxs(idx):runidxs(idx+1)-1) == Z(j).ExperimentTime(1),1));
+                    Z(j).NeuralTimeStart = ctime(runidxs(idx)-1 + find(etime(runidxs(idx):runidxs(idx+1)-1) == Z(j).ExperimentTime(1),1));
                     start = 0;
                     changed = 0;
                 end
@@ -141,7 +141,7 @@ for i = 1:length(D)
                 if (~isempty(etime) && ~start)
                     
                     if (etime(runidxs(idx)) <= Z(j).ExperimentTime(end) && etime(runidxs(idx+1)-1) >= Z(j).ExperimentTime(end))  % this file contains trial start
-                        Z(j).CerebusTimeStop = ctime(runidxs(idx)-1 + find(etime(runidxs(idx):runidxs(idx+1)-1) == Z(j).ExperimentTime(end),1));
+                        Z(j).NeuralTimeStop = ctime(runidxs(idx)-1 + find(etime(runidxs(idx):runidxs(idx+1)-1) == Z(j).ExperimentTime(end),1));
                         start = 1;
                         Z(j).NEVFile = nev.MetaTags.Filename;
                         
@@ -151,7 +151,7 @@ for i = 1:length(D)
                             for k = 1:addspikes
                                 
                                 spikes = nev.Data.Spikes.TimeStamp(nev.Data.Spikes.Electrode == k & nev.Data.Spikes.Unit == 0);
-                                times = ctime(ctime >= Z(j).CerebusTimeStart & ctime <= Z(j).CerebusTimeStop);
+                                times = ctime(ctime >= Z(j).NeuralTimeStart & ctime <= Z(j).NeuralTimeStop);
                                 bins = histc(spikes, times);
                                 spiketimes = zeros(1, sum(bins));
                                 
@@ -188,7 +188,7 @@ for i = 1:length(D)
         
         end
         
-        if (j == length(Z) && ~isempty(Z(j).CerebusTimeStop))
+        if (j == length(Z) && ~isempty(Z(j).NeuralTimeStop))
             
             trialLen = max(arrayfun(@(x) length(x.ExperimentTime), Z));
             
@@ -207,45 +207,45 @@ for i = 1:length(D)
     
 end
 
-% Add broadband channels to Z Struct:
-if (~isempty(addbb))
-    
-    % Get rid of trials we don't have data for:
-    Z(arrayfun(@(x) isempty(x.CerebusTimeStart) || isempty(x.CerebusTimeStop), Z)) = [];
-    
-    % Set sampling rate & NS file extension:
-    rates = [.5, 1, 2, 10, 30, 30];
-    numsamp = rates(samprate);
-    nsext = ['.ns', num2str(samprate)];
-    
-    % Add data:
-    for i = 1:length(Z)
-        
-        % Load in NS5 file:
-        file = '';
-        if (~strcmp(Z(i).NEVFile, file))
-            file = Z(i).NEVFile;
-            NS = openNSx('read', [NEVdir, '\\', file, nsext]);
-        end
-        
-        % Add in broadband data & trim to match trial length:
-        t = length(Z(i).ExperimentTime)*numsamp;
-        for j = 1:length(addbb)
-
-            Z(i).Broadband(j).Data = double(NS.Data(addbb(j),ceil(Z(i).CerebusTimeStart/(30/numsamp)):ceil(Z(i).CerebusTimeStop/(30/numsamp))));
-
-            len = length(Z(i).Broadband(j).Data);
-            if (len > t)     % subtract some
-                Z(i).Broadband(j).Data = Z(i).Broadband(j).Data(1+floor(abs(t-len)/2):end-ceil(abs(t-len)/2));
-            elseif (len < t) % add some
-                Z(i).Broadband(j).Data = padarray(Z(i).Broadband(j).Data, [0,floor(abs(t-len)/2)], 'replicate', 'pre');
-                Z(i).Broadband(j).Data = padarray(Z(i).Broadband(j).Data, [0,ceil(abs(t-len)/2)], 'replicate', 'post');
-            end
-        end
-        
-    end
-
-end
+% % Add broadband channels to Z Struct:
+% if (~isempty(addbb))
+%     
+%     % Get rid of trials we don't have data for:
+%     Z(arrayfun(@(x) isempty(x.CerebusTimeStart) || isempty(x.CerebusTimeStop), Z)) = [];
+%     
+%     % Set sampling rate & NS file extension:
+%     rates = [.5, 1, 2, 10, 30, 30];
+%     numsamp = rates(samprate);
+%     nsext = ['.ns', num2str(samprate)];
+%     
+%     % Add data:
+%     for i = 1:length(Z)
+%         
+%         % Load in NS5 file:
+%         file = '';
+%         if (~strcmp(Z(i).NEVFile, file))
+%             file = Z(i).NEVFile;
+%             NS = openNSx('read', [NEVdir, '\\', file, nsext]);
+%         end
+%         
+%         % Add in broadband data & trim to match trial length:
+%         t = length(Z(i).ExperimentTime)*numsamp;
+%         for j = 1:length(addbb)
+% 
+%             Z(i).Broadband(j).Data = double(NS.Data(addbb(j),ceil(Z(i).CerebusTimeStart/(30/numsamp)):ceil(Z(i).CerebusTimeStop/(30/numsamp))));
+% 
+%             len = length(Z(i).Broadband(j).Data);
+%             if (len > t)     % subtract some
+%                 Z(i).Broadband(j).Data = Z(i).Broadband(j).Data(1+floor(abs(t-len)/2):end-ceil(abs(t-len)/2));
+%             elseif (len < t) % add some
+%                 Z(i).Broadband(j).Data = padarray(Z(i).Broadband(j).Data, [0,floor(abs(t-len)/2)], 'replicate', 'pre');
+%                 Z(i).Broadband(j).Data = padarray(Z(i).Broadband(j).Data, [0,ceil(abs(t-len)/2)], 'replicate', 'post');
+%             end
+%         end
+%         
+%     end
+% 
+% end
 
 
 newZ = Z;
