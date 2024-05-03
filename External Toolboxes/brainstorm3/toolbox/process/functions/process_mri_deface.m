@@ -5,7 +5,7 @@ function varargout = process_mri_deface( varargin )
 % This function is part of the Brainstorm software:
 % https://neuroimage.usc.edu/brainstorm
 % 
-% Copyright (c)2000-2020 University of Southern California & McGill University
+% Copyright (c) University of Southern California & McGill University
 % This software is distributed under the terms of the GNU General Public License
 % as published by the Free Software Foundation. Further details on the GPLv3
 % license can be found at http://www.gnu.org/copyleft/gpl.html.
@@ -19,7 +19,7 @@ function varargout = process_mri_deface( varargin )
 % For more information type "brainstorm license" at command prompt.
 % =============================================================================@
 %
-% Authors: Francois Tadel, 2019-2020
+% Authors: Francois Tadel, 2019-2023
 %          Inspired from SPM12 function spm_deface
 
 eval(macro_method);
@@ -137,10 +137,11 @@ function [DefacedFiles, errMsg] = Compute(MriFiles, OPTIONS)
         iSubject = MriFiles;
         % Get volumes to deface
         sSubject = bst_get('Subject', iSubject);
-        MriFiles = {sSubject.Anatomy.FileName};
+        iNoAtlas = find(cellfun(@(c)isempty(strfind(c, '_volatlas')), {sSubject.Anatomy.FileName}));
+        MriFiles = {sSubject.Anatomy(iNoAtlas).FileName};
         % Put the default volume first
-        if ~isempty(sSubject.iAnatomy)
-            iOrder = [sSubject.iAnatomy, setdiff(1:length(sSubject.Anatomy), sSubject.iAnatomy)];
+        if ~isempty(sSubject.iAnatomy) && ismember(sSubject.iAnatomy, iNoAtlas)
+            iOrder = [sSubject.iAnatomy, setdiff(1:length(iNoAtlas), sSubject.iAnatomy)];
             MriFiles = MriFiles(iOrder);
         end
     end
@@ -184,6 +185,9 @@ function [DefacedFiles, errMsg] = Compute(MriFiles, OPTIONS)
     MriHead = [];
     for iFile = 1:length(MriFiles)
         bst_progress('text', 'Loading input MRI...');
+        % Check if volume is CT
+        tagFileCt = '_volct';
+        isCt = ~isempty(strfind(MriFiles{iFile}, tagFileCt));
         % Get subject index
         [sSubject, iSubject, iAnatomy] = bst_get('MriFile', MriFiles{iFile});
         % If MRI was already defaced: skip
@@ -227,14 +231,15 @@ function [DefacedFiles, errMsg] = Compute(MriFiles, OPTIONS)
                 disp(['BST> Deface: Using ' exePath]);
                 % Save temporary MRI file
                 bst_progress('text', 'Saving temporary nii file...');
-                fileNii = bst_fullfile(bst_get('BrainstormTmpDir'), 'orig.nii');
+                TmpDir = bst_get('BrainstormTmpDir', 0, 'deface');
+                fileNii = bst_fullfile(TmpDir, 'orig.nii');
                 out_mri_nii(sMri, fileNii, 'int16');
                 % Change current folder to .brainstorm/tmp, because mri_deface saves a useless log in the current folder
                 curdir = pwd;
-                cd(bst_get('BrainstormTmpDir'));
+                cd(TmpDir);
                 % Call mri_deface
                 bst_progress('text', 'Running mri_deface...');
-                fileNiiDefaced = bst_fullfile(bst_get('BrainstormTmpDir'), 'orig_defaced.nii');
+                fileNiiDefaced = bst_fullfile(TmpDir, 'orig_defaced.nii');
                 cmdDeface = [exePath ' ' fileNii ' ' talFile ' ' faceFile ' ' fileNiiDefaced];
                 status = system(cmdDeface);
                 if (status ~= 0)
@@ -251,6 +256,8 @@ function [DefacedFiles, errMsg] = Compute(MriFiles, OPTIONS)
                 sMriDefaced = in_mri_nii(fileNiiDefaced, 0, 0, 0);
                 % Saves defaced volume
                 sMri.Cube = sMriDefaced.Cube;
+                % Delete the temporary files
+                file_delete(TmpDir, 1, 1);
                 
             case 'brainsuite'
                 % Get ICBM152 defacing template
@@ -302,7 +309,16 @@ function [DefacedFiles, errMsg] = Compute(MriFiles, OPTIONS)
             bst_memory('UnloadMri', MriFile);
         % Add new file
         else
-            DefacedFiles{end+1} = db_add(iSubject, sMri, 0);
+            tmp = db_add(iSubject, sMri, 0);
+            % Add file tag for CT volume
+            if isCt
+                [fPath, fBase, fExt] = bst_fileparts(file_fullpath(tmp));
+                fBase = [fBase, tagFileCt, fExt];
+                tmpNew = bst_fullfile(fPath, fBase);
+                file_move(file_fullpath(tmp), tmpNew);
+                tmp = file_short(tmpNew);
+            end
+            DefacedFiles{end+1} = tmp;
             iAnatomy = length(sSubject.Anatomy) + 1;
         end
         % Update database registration

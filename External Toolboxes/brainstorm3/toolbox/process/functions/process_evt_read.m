@@ -5,7 +5,7 @@ function varargout = process_evt_read( varargin )
 % This function is part of the Brainstorm software:
 % https://neuroimage.usc.edu/brainstorm
 % 
-% Copyright (c)2000-2020 University of Southern California & McGill University
+% Copyright (c) University of Southern California & McGill University
 % This software is distributed under the terms of the GNU General Public License
 % as published by the Free Software Foundation. Further details on the GPLv3
 % license can be found at http://www.gnu.org/copyleft/gpl.html.
@@ -20,6 +20,8 @@ function varargout = process_evt_read( varargin )
 % =============================================================================@
 %
 % Authors: Francois Tadel, 2012-2021
+%          Raymundo Cassani, 2022
+%          Marc Lalancette, 2022
 
 eval(macro_method);
 end
@@ -46,9 +48,22 @@ function sProcess = GetDescription() %#ok<DEFNU>
     sProcess.options.trackmode.Comment = {'Value: detect the changes of channel value', ...
                                           'Bit: detect the changes for each bit independently', ...
                                           'TTL: detect peaks of 5V/12V on an analog channel (baseline=0V)', ...
-                                          'RTTL: detect peaks of 0V on an analog channel (baseline!=0V)'};
-    sProcess.options.trackmode.Type    = 'radio';
-    sProcess.options.trackmode.Value   = 1;
+                                          'RTTL: detect peaks of 0V on an analog channel (baseline!=0V)'; ...
+                                          'value', 'bit', 'ttl', 'rttl'};
+    sProcess.options.trackmode.Type    = 'radio_label';
+    sProcess.options.trackmode.Value   = 'value';
+    sProcess.options.trackmode.Controller = struct('value', 'mask_check');
+    % Option: Mask boolean
+    sProcess.options.maskcheck.Comment = 'Apply digital mask to events (only for "Value" option)';
+    sProcess.options.maskcheck.Type    = 'checkbox';
+    sProcess.options.maskcheck.Value   = 0;
+    sProcess.options.maskcheck.Class   = 'mask_check';
+    sProcess.options.maskcheck.Controller = 'mask_value';
+    % Option: Mask
+    sProcess.options.mask.Comment = 'Mask value (integer or 0xHEX): ';
+    sProcess.options.mask.Type    = 'text';
+    sProcess.options.mask.Value   = '0';
+    sProcess.options.mask.Class   = 'mask_value';
     % Option: Accept zeros
     sProcess.options.zero.Comment = 'Accept zeros as trigger values';
     sProcess.options.zero.Type    = 'checkbox';
@@ -80,15 +95,31 @@ function OutputFiles = Run(sProcess, sInput) %#ok<DEFNU>
     end
     % Event type
     switch (sProcess.options.trackmode.Value)
-        case 1,  EventsTrackMode = 'value';
-        case 2,  EventsTrackMode = 'bit';
-        case 3,  EventsTrackMode = 'ttl';
-        case 4,  EventsTrackMode = 'rttl';
+        case {1, 'value'}, EventsTrackMode = 'value';
+        case {2, 'bit'},   EventsTrackMode = 'bit';
+        case {3, 'ttl'},   EventsTrackMode = 'ttl';
+        case {4, 'rttl'},  EventsTrackMode = 'rttl';
     end
+    sProcess.options.trackmode.Value = EventsTrackMode;
     % Other options
     isAcceptZero = sProcess.options.zero.Value;
     MinDuration = sProcess.options.min_duration.Value{1};
-    
+    % Get mask
+    MaskValue = 0;
+    if strcmpi(EventsTrackMode, 'value') && sProcess.options.maskcheck.Value
+        strMask = regexprep(sProcess.options.mask.Value, '^0[x|X]', '');
+        % Hex value was provided
+        if ~strcmpi(strMask, sProcess.options.mask.Value)
+            MaskValue = hex2dec(strMask);
+        % Integer string (only 0-9 characters)
+        elseif isempty(regexp(strMask, '[^0-9]', 'once'))
+            MaskValue = str2double(strMask);
+        % Invalid string
+        else
+            bst_report('Error', sProcess, sInput, ['String "' strMask '" is not a valid mask.']);
+            return
+        end
+    end
     % ===== GET FILE DESCRIPTOR =====
     % Load the raw file descriptor
     isRaw = strcmpi(sInput.FileType, 'raw');
@@ -111,8 +142,8 @@ function OutputFiles = Run(sProcess, sInput) %#ok<DEFNU>
     % CTF: Read separately upper and lower bytes
     if ismember(sFile.format, {'CTF', 'CTF-CONTINUOUS'})
         % Detect separately events on the upper and lower bytes of the STIM channel
-        eventsU = Compute(sFile, ChannelMat, [StimChan '__U'], EventsTrackMode, isAcceptZero, MinDuration);
-        eventsL = Compute(sFile, ChannelMat, [StimChan '__L'], EventsTrackMode, isAcceptZero, MinDuration);
+        eventsU = Compute(sFile, ChannelMat, [StimChan '__U'], EventsTrackMode, isAcceptZero, MinDuration, MaskValue);
+        eventsL = Compute(sFile, ChannelMat, [StimChan '__L'], EventsTrackMode, isAcceptZero, MinDuration, MaskValue);
         % If there are events on both: add marker U/L
         if ~isempty(eventsU) && ~isempty(eventsL)
             for iEvt = 1:length(eventsU)
@@ -124,7 +155,7 @@ function OutputFiles = Run(sProcess, sInput) %#ok<DEFNU>
         end
         events = [eventsL, eventsU];
     else
-        events = Compute(sFile, ChannelMat, StimChan, EventsTrackMode, isAcceptZero, MinDuration);
+        events = Compute(sFile, ChannelMat, StimChan, EventsTrackMode, isAcceptZero, MinDuration, MaskValue);
     end
     
     % ===== SAVE RESULT =====
@@ -150,8 +181,11 @@ end
 
 
 %% ===== COMPUTE =====
-function [events, EventsTrackMode, StimChan] = Compute(sFile, ChannelMat, StimChan, EventsTrackMode, isAcceptZero, MinDuration)
+function [events, EventsTrackMode, StimChan] = Compute(sFile, ChannelMat, StimChan, EventsTrackMode, isAcceptZero, MinDuration, MaskValue)
     % Parse inputs
+    if (nargin < 7)
+        MaskValue = 0;
+    end
     if (nargin < 6)
         MinDuration = 0;
     end
@@ -222,7 +256,6 @@ function [events, EventsTrackMode, StimChan] = Compute(sFile, ChannelMat, StimCh
             StimChan = StimChan(1:end-3);
         end
     end
-    trigshift = fix(sFile.prop.sfreq * 9/1200);
 
     % ===== ASK READ MODE =====
     if strcmpi(EventsTrackMode, 'ask')
@@ -263,150 +296,174 @@ function [events, EventsTrackMode, StimChan] = Compute(sFile, ChannelMat, StimCh
     % Process by blocks (if not: out of memory)
     totalLength = (samplesBounds(2) - samplesBounds(1) + 1);
     nbBlocks = ceil(totalLength / blockLength);
-    % Progress bar
+    % Progress bar, channels
     isProgressBar = bst_progress('isVisible');
-    bst_progress('start', 'Import events', 'Reading events channels...', 0, nbBlocks);
+    bst_progress('start', 'Import events', 'Reading events channels...', 0, length(iChannels) * nbBlocks);
 
-    trackPrev = [];
-    nTooShort = 0;
-    % For each block
-    for iBlock = 1:nbBlocks
+    tracks_name = {};
+    tracks_vals = {};
+    tracks_smps = {};
+    % Process each channel
+    for iChannel = 1 : length(iChannels)
         % Increment progress bar
-        bst_progress('inc', 1);
+        track_prev = [];
+        track_vals = [];
+        track_smps = [];
+        % Progress bar, blocks
+        bst_progress('text', ['Reading events in channel ' StimChan{iChannel} ' ...']);
+        for iBlock = 1:nbBlocks
+            % Increment progress bar
+            bst_progress('inc', 1);
+            % === READ BLOCK ===
+            % Get samples indices for this block
+            samplesBlock = samplesBounds(1) + [(iBlock - 1) * blockLength, iBlock * blockLength - 1];
+            samplesBlock(2) = min(samplesBlock(2), samplesBounds(2));
+            % Read block of data
+            [track, ~] = in_fread(sFile, ChannelMat, 1, samplesBlock, iChannels(iChannel));
+            % Round values
+            track = fix(track);
+            % Keep only track changes
+            if iBlock == 1
+                track_smps(1) = 1;
+                track_vals(1) = track(1);
+                track_prev = track(1);
+            end
+            % === KEEP ALL CHANGES ===
+            ixDiffTrack = find(diff([track_prev, track]));
+            track_vals = [track_vals, track(ixDiffTrack)];
+            track_smps = [track_smps, samplesBlock(1) + ixDiffTrack];
+            % Saving ending state for next block
+            track_prev = track(end);
+        end
 
-        % === READ BLOCK ===
-        % Get samples indices for this block
-        samplesBlock = samplesBounds(1) + [(iBlock - 1) * blockLength, iBlock * blockLength - 1];
-        samplesBlock(2) = min(samplesBlock(2), samplesBounds(2));
-        % Read block of data
-        [tracks, times] = in_fread(sFile, ChannelMat, 1, samplesBlock, iChannels);
-        
-        % === BLOCK EDITED 16-JUN-2021 ===
-        % Round values
-        tracks = fix(tracks);
         % CTF: Read separately Upper and Lower bytes
         if ismember(sFile.format, {'CTF', 'CTF-CONTINUOUS'})
             % Events are read as int32, while they are actually uint32: fix negative values
-            tracks(tracks<0) = tracks(tracks<0) + 2^32;
+            track_vals(track_vals<0) = track_vals(track_vals<0) + 2^32;
             % Keep only upper or lower bytes
             if isCtfUp
-                tracks = fix(tracks / 2^16);
+                track_vals = fix(track_vals / 2^16);
             elseif isCtfLow
-                tracks = double(bitand(uint32(tracks), 2^16-1));
+                track_vals = double(bitand(uint32(track_vals), 2^16-1));
             end
-            % Determine the precise timing of the triggers (from FieldTrip's read_ctf_trigger)
-            upflank = [0 (diff(tracks)>0 & tracks(1:(end-1))==0)];
-            tracks = upflank(1:(end-trigshift)).*tracks((1+trigshift):end);
         % Other formats
         else
             % Old code: Might be useless and/or detrimental to the reading of the events
             % tracks = reshape(double(typecast(int16(tracks(:)), 'uint16')), size(tracks));
             % Use the same fix as for CTF files
-            tracks(tracks<0) = tracks(tracks<0) + 2^32;
+            track_vals(track_vals<0) = track_vals(track_vals<0) + 2^32;
         end
-        % =================================
-            
-        % === ADD INITIAL STATE ===
-        % Add the initial status of the tracks
-        if isempty(trackPrev)
-            tracks = [tracks(:,1), tracks];
-        else
-            tracks = [trackPrev, tracks];
-        end
-        % Saving ending state for next block
-        trackPrev = tracks(:,end);
 
         % === SEPARATE TRACKS ===
         % Each bit of each channel is interpreted as a track
         switch lower(EventsTrackMode)
             case 'bit'
-                tracks_tmp = [];
-                tracks_name = {};
-                for iTrack = 1:size(tracks, 1)
-                    % Convert track in binary values
-                    track_bin = double(fliplr(dec2bin(tracks(iTrack, :)))');
-                    track_bin(track_bin == '0') = 0;
-                    track_bin(track_bin == '1') = 1;
-                    % Add those binary tracks to the list
-                    tracks_tmp = [tracks_tmp; track_bin];
-                    % Save name of the tracks
-                    for iBit = 1:size(track_bin, 1)
-                        if (length(StimChan) > 1)
-                            tracks_name{end+1} = sprintf('%s_%d', StimChan{iTrack}, iBit);
-                        else
-                            tracks_name{end+1} = sprintf('%d', iBit);
-                        end
+                % Convert track in binary values
+                track_bin = double(fliplr(dec2bin(track_vals))');
+                track_bin(track_bin == '0') = 0;
+                track_bin(track_bin == '1') = 1;
+                nBit = size(track_bin, 1);
+                tracks_bit_name = cell(1, nBit);
+                tracks_bit_vals = cell(1, nBit);
+                tracks_bit_smps = cell(1, nBit);
+                % Data for each binary track
+                for iBit = 1 : nBit
+                    if (length(StimChan) > 1)
+                        tracks_bit_name{iBit} = sprintf('%s_%d', StimChan{iChannel}, iBit);
+                    else
+                        tracks_bit_name{iBit} = sprintf('%d', iBit);
                     end
+                    % Keep changes in each binary tracks
+                    ixDiffTrackBit = find(diff([track_prev, track_bin(iBit, :)]));
+                    tracks_bit_vals{iBit} = track_bin(iBit, ixDiffTrackBit);
+                    tracks_bit_smps{iBit} = track_smps(ixDiffTrackBit);
                 end
-                tracks = tracks_tmp;
+                % Append to other tracks
+                tracks_name = [tracks_name, tracks_bit_name];
+                tracks_vals = [tracks_vals, tracks_bit_vals];
+                tracks_smps = [tracks_smps, tracks_bit_smps];
             case 'value'
-                tracks_name = StimChan;
+                tracks_name{end+1} = StimChan{iChannel};
+                tracks_vals{end+1} = track_vals;
+                tracks_smps{end+1} = track_smps;
             case {'ttl', 'rttl'}
-                tracks_name = StimChan;
-                tracks = abs(round(tracks));
-                tracks(tracks ~= 0) = 1;
+                tracks_name{end+1} = StimChan{iChannel};
+                track_vals = abs(round(track_vals));
+                track_vals(track_vals ~= 0) = 1;
+                tracks_vals{end+1} = track_vals;
+                tracks_smps{end+1} = track_smps;
         end
+    end
 
-        % === GET EVENTS ===
-        % Get the changes on each track
-        diffTrack = diff(tracks, [], 2);
-        % Remove intial state from tracks
-        tracks(:,1) = [];
-        % Process each track separately
-        for iTrack = 1:size(tracks, 1)
-            % Get the samples where something happens
-            if strcmpi(EventsTrackMode, 'rttl')
-                iSmp = find((diffTrack(iTrack,:) ~= 0) & ((tracks(iTrack,:) == 0)));
-            elseif isAcceptZero
-                iSmp = find((diffTrack(iTrack,:) ~= 0));
-            else
-                iSmp = find((diffTrack(iTrack,:) ~= 0) & ((tracks(iTrack,:) ~= 0)));
-            end
-            % Process each change individually
-            for i = 1:length(iSmp)
+    % === PROCESS EACH TRACK SEPARATELY ===
+    nTooShort = 0;
+    for iTrack = 1:length(tracks_name)
+        % Apply mask
+        if strcmpi(EventsTrackMode, 'value') && MaskValue > 0
+            tracks_vals{iTrack} = bitand(tracks_vals{iTrack}, MaskValue, 'uint32');
+        end
+        % Get the indices where something happens
+        if strcmpi(EventsTrackMode, 'rttl')
+            ixs = find(tracks_vals{iTrack} == 0);
+        elseif isAcceptZero
+            ixs = 1 : length(tracks_vals{iTrack});
+        else
+            ixs = find(tracks_vals{iTrack} ~= 0);
+        end
+        % Process each change individually
+        for i = 1:length(ixs)
+            if i < length(ixs)
                 % Skip if shorter than MinDuration
-                if (MinDuration > 0) && ((length(tracks) - iSmp(i) < MinDuration) || ~all(tracks(iSmp(i):iSmp(i)+MinDuration) == tracks(iSmp(i))))
+                duration_i = tracks_smps{iTrack}(ixs(i)+1) - tracks_smps{iTrack}(ixs(i));
+                if (MinDuration > 0) && (duration_i < MinDuration)
                     nTooShort = nTooShort + 1;
+                    % Pass start sample to next event longer than MinDuration
+                    tracks_smps{iTrack}(ixs(i)+1) = tracks_smps{iTrack}(ixs(i));
                     continue;
                 end
-                % Build event name
-                switch lower(EventsTrackMode)
-                    case 'bit'
-                        label = tracks_name{iTrack};
-                    case 'value'
-                        value = tracks(iTrack, iSmp(i));
-                        if (length(StimChan) > 1)
-                            label = sprintf('%s_%d', StimChan{iTrack}, value);
-                        else
-                            label = sprintf('%d', value);
-                        end
-                    case {'ttl', 'rttl'}
-                        label = StimChan{iTrack};
-                end
-                % Find this event in list of events
-                if ~isempty(events)
-                    iEvent = find(strcmpi({events.label}, label));
-                else
-                    iEvent = [];
-                end
-                % If event does not exist yet: add it
-                if isempty(iEvent)
-                    iEvent = length(events) + 1;
-                    events(iEvent).label      = label;
-                    events(iEvent).epochs     = [];
-                    events(iEvent).times      = [];
-                    events(iEvent).reactTimes = [];
-                    events(iEvent).select     = 1;
-                    events(iEvent).channels   = {};
-                    events(iEvent).notes      = {};
-                end
-                % Add occurrence of this event
-                iOcc = length(events(iEvent).times) + 1;
-                events(iEvent).epochs(iOcc)   = 1;
-                events(iEvent).times(iOcc)    = (iSmp(i) + samplesBlock(1) - 1) ./ sFile.prop.sfreq;
-                events(iEvent).channels{iOcc} = {};
-                events(iEvent).notes{iOcc}    = [];
             end
+            % Build event name
+            switch lower(EventsTrackMode)
+                case 'bit'
+                    label = tracks_name{iTrack};
+                    if (MinDuration == 0) && isAcceptZero
+                        if tracks_vals{iTrack}(ixs(i)) == 1
+                            label = [label '-set'];
+                        else
+                            label = [label '-reset'];
+                        end
+                    end
+                case 'value'
+                    value = tracks_vals{iTrack}(ixs(i));
+                    if (length(StimChan) > 1)
+                        label = sprintf('%s_%d', tracks_name{iTrack}, value);
+                    else
+                        label = sprintf('%d', value);
+                    end
+                case {'ttl', 'rttl'}
+                    label = tracks_name{iTrack};
+            end
+            % Find this event in list of events
+            if ~isempty(events)
+                iEvent = find(strcmpi({events.label}, label));
+            else
+                iEvent = [];
+            end
+            % If event does not exist yet: add it
+            if isempty(iEvent)
+                iEvent = length(events) + 1;
+                events(iEvent).label      = label;
+                events(iEvent).epochs     = [];
+                events(iEvent).times      = [];
+                events(iEvent).reactTimes = [];
+                events(iEvent).select     = 1;
+                events(iEvent).channels   = [];
+                events(iEvent).notes      = [];
+            end
+            % Add occurrence of this event
+            iOcc = length(events(iEvent).times) + 1;
+            events(iEvent).epochs(iOcc)   = 1;
+            events(iEvent).times(iOcc)    = (tracks_smps{iTrack}(ixs(i))-1) ./ sFile.prop.sfreq;
         end
     end
     % Display warning with removed events
@@ -418,7 +475,3 @@ function [events, EventsTrackMode, StimChan] = Compute(sFile, ChannelMat, StimCh
         bst_progress('stop');
     end
 end
-
-
-
-

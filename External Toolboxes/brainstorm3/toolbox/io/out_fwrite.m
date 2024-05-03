@@ -17,7 +17,7 @@ function sFile = out_fwrite(sFile, ChannelMat, iEpoch, SamplesBounds, iChannels,
 % This function is part of the Brainstorm software:
 % https://neuroimage.usc.edu/brainstorm
 % 
-% Copyright (c)2000-2020 University of Southern California & McGill University
+% Copyright (c) University of Southern California & McGill University
 % This software is distributed under the terms of the GNU General Public License
 % as published by the Free Software Foundation. Further details on the GPLv3
 % license can be found at http://www.gnu.org/copyleft/gpl.html.
@@ -63,8 +63,12 @@ if ~ismember(sFile.format, {'CTF-CONTINUOUS', 'SPM-DAT'})
         end
         fclose(sfid);
     end
-    % Open file
-    sfid = fopen(sFile.filename, 'r+', sFile.byteorder);
+    % Open file (using requested encoding)
+    if ~isfield(sFile, 'encoding') || isempty(sFile.encoding)
+        sfid = fopen(sFile.filename, 'r+', sFile.byteorder);
+    else
+        sfid = fopen(sFile.filename, 'r+', sFile.byteorder, sFile.encoding);
+    end
     if (sfid == -1)
         error(['Could not open output file: "' sFile.filename '".']);
     end

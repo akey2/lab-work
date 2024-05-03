@@ -5,7 +5,7 @@ function varargout = process_inverse_2018( varargin )
 % This function is part of the Brainstorm software:
 % https://neuroimage.usc.edu/brainstorm
 % 
-% Copyright (c)2000-2020 University of Southern California & McGill University
+% Copyright (c) University of Southern California & McGill University
 % This software is distributed under the terms of the GNU General Public License
 % as published by the Free Software Foundation. Further details on the GPLv3
 % license can be found at http://www.gnu.org/copyleft/gpl.html.
@@ -498,6 +498,12 @@ function [OutputFiles, errMessage] = Compute(iStudies, iDatas, OPTIONS)
             errMessage = [errMessage 'The noise covariance contains NaN values. Please re-calculate it after tagging correctly the bad channels in the recordings.' 10];
             break;
         end
+        % Check that bad channels in noise covariance are the same as bad channels in recordings
+        badChNoiseCov_goodChRecs = intersect(find(and(~any(NoiseCovMat.NoiseCov,1), ~any(NoiseCovMat.NoiseCov,2)')), GoodChannel);
+        if ~isempty(badChNoiseCov_goodChRecs)
+            errMessage = [errMessage 'Bad channels in noise covariance are different from bad channels in recordings.' 10 'Please re-calculate it after tagging correctly the bad channels in the recordings.' 10];
+            break;
+        end
 %         % Divide noise covariance by number of trials (DEPRECATED IN THIS VERSION)
 %         if ~isempty(nAvg) && (nAvg > 1)
 %             NoiseCovMat.NoiseCov = NoiseCovMat.NoiseCov ./ nAvg;
@@ -510,6 +516,11 @@ function [OutputFiles, errMessage] = Compute(iStudies, iDatas, OPTIONS)
             % Check for NaN values in the noise covariance
             if ~isempty(DataCovMat.NoiseCov) && (nnz(isnan(DataCovMat.NoiseCov(GoodChannel, GoodChannel))) > 0)
                 errMessage = [errMessage 'The data covariance contains NaN values. Please re-calculate it after tagging correctly the bad channels in the recordings.' 10];
+                break;
+            end
+            badChDataCov_goodChRecs = intersect(find(and(~any(DataCovMat.NoiseCov,1), ~any(DataCovMat.NoiseCov,2)')), GoodChannel);
+            if ~isempty(badChDataCov_goodChRecs)
+                errMessage = [errMessage 'Bad channels in data covariance are different from bad channels in recordings.' 10 'Please re-calculate it after tagging correctly the bad channels in the recordings.' 10];
                 break;
             end
 %             % Divide data covariance by number of trials
@@ -605,7 +616,7 @@ function [OutputFiles, errMessage] = Compute(iStudies, iDatas, OPTIONS)
                 end
                 % In the case of a surface region, add the match of the vertices in the cortex surface and the GridLoc matrix
                 if strcmpi(sScout.Region(2), 'S')
-                    iVert2Grid = [iVert2Grid; sScout.Vertices', sScout.GridRows'];
+                    iVert2Grid = [iVert2Grid; sScout.Vertices(:), sScout.GridRows(:)];
                 end
                 % Add to the scout definition the indices in the ImageGrid
                 iAllGrid   = [iAllGrid,   reshape(repmat(sScout.GridRows,nComp,1), 1, [])];
@@ -614,12 +625,16 @@ function [OutputFiles, errMessage] = Compute(iStudies, iDatas, OPTIONS)
             end
             % Create sparse conversion matrices between indices
             if ~isempty(iVert2Grid)
-                HeadModelInit.GridAtlas(1).Vert2Grid = logical(sparse(iVert2Grid(:,2), iVert2Grid(:,1), ones(size(iVert2Grid,1),1)));
+                % Ensure size is full grid for clarity and to allow matrix multiplication, e.g. with Grid2Source.
+                % If the last region(s) are volume, they correspond to grid points but not vertices,
+                % so this sparse array could be missing grid rows were its size not specified.
+                nVert = size(iVert2Grid,1);
+                HeadModelInit.GridAtlas(1).Vert2Grid = sparse(iVert2Grid(:,2), iVert2Grid(:,1), true(nVert,1), max(iAllGrid), max(iVert2Grid(:,1)));
             else
                 HeadModelInit.GridAtlas(1).Vert2Grid = [];
             end
             if ~isempty(iAllSource)
-                HeadModelInit.GridAtlas(1).Grid2Source = logical(sparse(iAllSource, iAllGrid, ones(size(iAllSource))));
+                HeadModelInit.GridAtlas(1).Grid2Source = sparse(iAllSource, iAllGrid, true(size(iAllSource)));
             else
                 HeadModelInit.GridAtlas(1).Grid2Source = [];
             end

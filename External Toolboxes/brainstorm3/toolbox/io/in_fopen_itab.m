@@ -7,7 +7,7 @@ function [sFile, ChannelMat] = in_fopen_itab(DataFile)
 % This function is part of the Brainstorm software:
 % https://neuroimage.usc.edu/brainstorm
 % 
-% Copyright (c)2000-2020 University of Southern California & McGill University
+% Copyright (c) University of Southern California & McGill University
 % This software is distributed under the terms of the GNU General Public License
 % as published by the Free Software Foundation. Further details on the GPLv3
 % license can be found at http://www.gnu.org/copyleft/gpl.html.
@@ -34,9 +34,9 @@ end
 hdr = read_itab_mhd(HeaderFile);
 % Get endianness
 switch (hdr.data_type)
-    case {0,1,2},  byteorder = 'b';
-    case {3,4,5},  byteorder = 'l';
-    otherwise,     error('Data type not supported.');
+    case {0,1,2, 6},  byteorder = 'b';
+    case {3,4,5},     byteorder = 'l';
+    otherwise,        error('Data type not supported.');
 end
 
 
@@ -52,7 +52,7 @@ for i = 1:hdr.nchan
     % Position
     for iCoil = 1:hdr.ch(iChannels(i)).ncoils
         ChannelMat.Channel(i).Loc(:,iCoil)    = hdr.ch(iChannels(i)).position(iCoil).r_s' ./ 1000;
-        ChannelMat.Channel(i).Orient(:,iCoil) = hdr.ch(iChannels(i)).position(iCoil).u_s' ./ 1000;
+        ChannelMat.Channel(i).Orient(:,iCoil) = hdr.ch(iChannels(i)).position(iCoil).u_s';
         ChannelMat.Channel(i).Weight(1,iCoil) = hdr.ch(iChannels(i)).wgt(iCoil);
     end
     % Type
@@ -112,7 +112,7 @@ ChannelFlag(ChannelFlag == 0) = -1;
 
 %% ===== EXTRA HEAD POINTS =====
 % Get extra head points
-HpLoc = hdr.marker;
+HpLoc = hdr.marker(1:3, :); % Keep only marker positions
 iGood = find(~all(HpLoc == 0, 1));
 HpLoc = HpLoc(:,iGood) ./ 1000;
 nPoints = size(HpLoc,2);
@@ -167,7 +167,7 @@ if (hdr.nsmpl >= 1)
     % Format list
     for iEvt = 1:length(uniqueType)
         % Find list of occurences of this event
-        iOcc = find(strcmpi(allType, uniqueType(iEvt)));
+        iOcc = find(allType == uniqueType(iEvt));
         % Fill events structure
         events(iEvt).label      = num2str(uniqueType(iEvt));
         events(iEvt).color      = [];
@@ -175,8 +175,8 @@ if (hdr.nsmpl >= 1)
         events(iEvt).select     = 1;
         events(iEvt).times      = allStart(iOcc) ./ sFile.prop.sfreq;  % Get time and samples  (considering that samples are zero-based)
         events(iEvt).epochs     = ones(1, length(events(iEvt).times));  % Epoch: set as 1 for all the occurrences
-        events(iEvt).channels   = cell(1, size(events(iEvt).times, 2));
-        events(iEvt).notes      = cell(1, size(events(iEvt).times, 2));
+        events(iEvt).channels   = [];
+        events(iEvt).notes      = [];
     end
     % Import this list
     sFile = import_events(sFile, [], events);

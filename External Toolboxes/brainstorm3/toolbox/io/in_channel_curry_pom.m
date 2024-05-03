@@ -1,5 +1,5 @@
 function ChannelMat = in_channel_curry_pom(ChannelFile)
-% IN_CHANNEL_CURRY_RS3:  Read 3D cartesian positions for a set of points from a Curry .pom file.
+% IN_CHANNEL_CURRY_POM:  Read 3D cartesian positions for a set of points from a Curry .pom file.
 %
 % USAGE:  ChannelMat = in_channel_curry_pom(ChannelFile)
 %
@@ -10,7 +10,7 @@ function ChannelMat = in_channel_curry_pom(ChannelFile)
 % This function is part of the Brainstorm software:
 % https://neuroimage.usc.edu/brainstorm
 % 
-% Copyright (c)2000-2020 University of Southern California & McGill University
+% Copyright (c) University of Southern California & McGill University
 % This software is distributed under the terms of the GNU General Public License
 % as published by the Free Software Foundation. Further details on the GPLv3
 % license can be found at http://www.gnu.org/copyleft/gpl.html.
@@ -68,7 +68,7 @@ while 1
             case 'pos'
                 xyz = sscanf(read_line, '%f %f %f') / 1000;
                 ChannelMat.Channel(iChannel).Type    = 'EEG';
-                ChannelMat.Channel(iChannel).Loc     = [-xyz(2); xyz(1); xyz(3)];
+                ChannelMat.Channel(iChannel).Loc     = [xyz(2); -xyz(1); xyz(3)];
                 ChannelMat.Channel(iChannel).Orient  = [];
                 ChannelMat.Channel(iChannel).Comment = '';
                 ChannelMat.Channel(iChannel).Weight  = 1;

@@ -11,7 +11,7 @@ function [DataMat, ChannelMat] = in_data_tvb(DataFile, ChannelFile)
 % This function is part of the Brainstorm software:
 % https://neuroimage.usc.edu/brainstorm
 % 
-% Copyright (c)2000-2020 University of Southern California & McGill University
+% Copyright (c) University of Southern California & McGill University
 % This software is distributed under the terms of the GNU General Public License
 % as published by the Free Software Foundation. Further details on the GPLv3
 % license can be found at http://www.gnu.org/copyleft/gpl.html.
@@ -30,6 +30,14 @@ function [DataMat, ChannelMat] = in_data_tvb(DataFile, ChannelFile)
 % Parse inputs
 if (nargin < 2) || isempty(ChannelFile)
     ChannelFile = [];
+end
+
+% Install/load EasyH5 Toolbox (https://github.com/NeuroJSON/easyh5) as plugin
+if ~exist('loadh5', 'file')
+    [isInstalled, errMsg] = bst_plugin('Install', 'easyh5');
+    if ~isInstalled
+        error(errMsg);
+    end
 end
 
 % Read data from .h5

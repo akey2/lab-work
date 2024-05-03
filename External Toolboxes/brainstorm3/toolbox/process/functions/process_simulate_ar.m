@@ -10,7 +10,7 @@ function varargout = process_simulate_ar( varargin )
 % This function is part of the Brainstorm software:
 % https://neuroimage.usc.edu/brainstorm
 % 
-% Copyright (c)2000-2020 University of Southern California & McGill University
+% Copyright (c) University of Southern California & McGill University
 % This software is distributed under the terms of the GNU General Public License
 % as published by the Free Software Foundation. Further details on the GPLv3
 % license can be found at http://www.gnu.org/copyleft/gpl.html.
@@ -24,20 +24,21 @@ function varargout = process_simulate_ar( varargin )
 % For more information type "brainstorm license" at command prompt.
 % =============================================================================@
 %
-% Authors: Guiomar Niso, Francois Tadel, 2013-2014
-%          Raymundo Cassani, 2021
+% Authors: Guiomar Niso, 2013-2014
+%          Raymundo Cassani, 2021-2022
+%          Francois Tadel, 2013-2022
 
 eval(macro_method);
 end
 
 
 %% ===== GET DESCRIPTION =====
-function sProcess = GetDescription() %#ok<DEFNU>
+function sProcess = GetDescription()
     % Description the process
-    sProcess.Comment     = 'Simulate AR signals (ARfit)';
+    sProcess.Comment     = 'Simulate AR signals (advanced)';
     sProcess.Category    = 'Custom';
     sProcess.SubGroup    = 'Simulate'; 
-    sProcess.Index       = 902; 
+    sProcess.Index       = 903; 
     sProcess.Description = 'https://neuroimage.usc.edu/brainstorm/Tutorials/Connectivity';
     % Definition of the input accepted by this process
     sProcess.InputTypes  = {'import'};
@@ -80,7 +81,7 @@ function sProcess = GetDescription() %#ok<DEFNU>
     sProcess.options.C.Type    = 'textarea';
     sProcess.options.C.Value   = 'C = eye(4,4);';
     % === DISPLAY SPECTRAL METRICS
-    sProcess.options.display.Comment = {'process_simulate_ar(''DisplayMetrics'',iProcess);', '<BR>', 'View spectral metrics'};
+    sProcess.options.display.Comment = {'process_simulate_ar(''DisplayMetrics'');', '<BR>', 'View spectral metrics'};
     sProcess.options.display.Type    = 'button';
     sProcess.options.display.Value   = [];
 end
@@ -93,33 +94,36 @@ end
 
 
 %% ===== GET COEFFICIENTS =====
-function [A, b, C] = GetCoefficients(sProcess)
+function [A, b, C, errMsg] = GetCoefficients(sProcess)
     A = [];
     b = [];
     C = [];
+    errMsg = '';
     % Evaluate Matlab code
     try
         eval(sProcess.options.A.Value);
         eval(sProcess.options.b.Value);
         eval(sProcess.options.C.Value);
     catch
-        e = lasterr();
-        bst_report('Error', sProcess, [], e);
+        errMsg = lasterr();
+        bst_report('Error', sProcess, [], errMsg);
         return;
     end    
     % Check variables dimensions
     if isempty(A) || isempty(b) || isempty(C)
-        bst_report('Error', sProcess, [], 'One of the variables is not defined (A, b or C).');
+        errMsg = 'One of the variables is not defined (A, b or C).';
+        bst_report('Error', sProcess, [], errMsg);
         return;
     elseif (size(A,1) ~= size(b,2)) || (size(b,1) ~= 1) || (size(A,1) ~= size(C,1)) || (size(C,1) ~= size(C,2))
-        bst_report('Error', sProcess, [], 'The dimensions of the input matrices are incompatible.');
+        errMsg = 'The dimensions of the input matrices are incompatible.';
+        bst_report('Error', sProcess, [], errMsg);
         return;
     end
 end
 
 
 %% ===== RUN =====
-function OutputFiles = Run(sProcess, sInputA) %#ok<DEFNU>
+function OutputFiles = Run(sProcess, sInputA)
     OutputFiles = {};
     % === GET OPTIONS ===
     % Get subject name
@@ -135,7 +139,11 @@ function OutputFiles = Run(sProcess, sInputA) %#ok<DEFNU>
     srate   = sProcess.options.srate.Value{1};
     
     % Get coefficients
-    [A, b, C] = GetCoefficients(sProcess);
+    [A, b, C, errMsg] = GetCoefficients(sProcess);
+    if ~isempty(errMsg)
+        bst_report('Error', sProcess, [], errMsg);
+        return;
+    end
     % Generate the signal
     try
         Data = Compute(b, A, C, nsamples);
@@ -395,13 +403,17 @@ end
 
 
 %% ===== DISPLAY SPECTRAL METRICS =====
-function DisplayMetrics(iProcess) %#ok<DEFNU>
-    % Get current process options
-    global GlobalData;
-    sProcess = GlobalData.Processes.Current(iProcess);
+function DisplayMetrics() %#ok<DEFNU>
+    % Get current process structure
+    sProcess = panel_process_select('GetCurrentProcess');
+    % Get options
     sfreq  = sProcess.options.srate.Value{1}; % Signal sampling frequency [Hz]
     % Get coefficients
-    [A, ~, ~] = GetCoefficients(sProcess); 
+    [A,~,~,errMsg] = GetCoefficients(sProcess);
+    if ~isempty(errMsg)
+        bst_error(['Error: Cannot compute coefficients.' 10 10 errMsg], 'Display metrics', 0);
+        return;
+    end
     A = reshape(A, size(A,1), size(A,1), [] );
     % Display spectral metrics
     hFig = HDisplayMetrics(A, sfreq); 
@@ -493,8 +505,10 @@ function hFig = HDisplayMetrics(A, sfreq)
     
         % Frequency axes
         linkaxes(hAxesMetric,'x');
-        set(hAxesMetric(1), 'XLim', [0, max(Freqs)]);  
-        xlabel(hAxesMetric(end, :), 'Frequency (Hz)');
+        set(hAxesMetric(1), 'XLim', [0, max(Freqs)]);
+        for iAxes = 1:size(hAxesMetric,2)
+            xlabel(hAxesMetric(end, iAxes), 'Frequency (Hz)');
+        end
         % Metric y axes
         linkaxes(hAxesMetric,'y');
         if ~isempty(metric.ylimits)
@@ -502,7 +516,9 @@ function hFig = HDisplayMetrics(A, sfreq)
         else
             set(hAxesMetric(1), 'YLim', [0, yMaxLimit]);
         end
-        ylabel(hAxesMetric(:,1), metric.ylabel);       
+        for iAxes = 1:size(hAxesMetric,1)
+            ylabel(hAxesMetric(iAxes,1), metric.ylabel);
+        end
     end
         
     bst_progress('stop');

@@ -19,7 +19,7 @@ function [sFile, ChannelMat] = in_fopen_blackrock(DataFile)
 % This function is part of the Brainstorm software:
 % https://neuroimage.usc.edu/brainstorm
 % 
-% Copyright (c)2000-2020 University of Southern California & McGill University
+% Copyright (c) University of Southern California & McGill University
 % This software is distributed under the terms of the GNU General Public License
 % as published by the Free Software Foundation. Further details on the GPLv3
 % license can be found at http://www.gnu.org/copyleft/gpl.html.
@@ -43,7 +43,7 @@ if ~exist('openNSx', 'file')
         error(errMsg);
     end
 end
-
+openNSxVer = openNSx('ver');
 
 %% ===== READ HEADER =====
 [fPath, fBase, fExt] = bst_fileparts(DataFile);
@@ -57,12 +57,14 @@ end
 disp('BST> Disabling NPMKSettings:ShowuVWarning...');
 NPMKSettings = settingsManager;
 readOptions = {};
-if isfield(NPMKSettings, 'ShowuVWarning')
-    NPMKSettings.ShowuVWarning = 0;
-end
+NPMKSettings.ShowuVWarning = 0;
 if isfield(NPMKSettings, 'ShowZeroPadWarning')
     NPMKSettings.ShowZeroPadWarning = 0;
-    readOptions{end+1} = 'nozeropad';
+    % 'nozeropad' is needed for verions before 7.4.4.0 (April 2023),
+    % after that no zeropadding is the default behaviour and 'nozeropad' is not a valid argument
+    if bst_plugin('CompareVersions', openNSxVer, '7.4.4.0') < 0
+        readOptions{end+1} = 'nozeropad';
+    end
 end
 settingsManager(NPMKSettings);
 % Read the firs two samples of the file to get the header information
@@ -92,7 +94,7 @@ sFile.byteorder = 'l';
 sFile.filename  = DataFile;
 sFile.format    = 'EEG-BLACKROCK';
 sFile.device    = 'Blackrock';
-sFile.header    = hdr;
+sFile.header    = [];   % Not saving header, it can save a few Gb
 sFile.comment   = [fBase, fExt];
 % Consider that the sampling rate of the file is the sampling rate of the first signal
 sFile.prop.sfreq   = hdr.SamplingFreq;
@@ -101,15 +103,16 @@ sFile.prop.nAvg    = 1;
 % Acquisition time
 sFile.acq_date = datestr(datenum(hdr.DateTime), 'dd-mmm-yyyy');
 % No info on bad channels
-sFile.channelflag = ones(hdr.ChannelCount, 1);
+nChannels = hdr.ChannelCount;
+sFile.channelflag = ones(nChannels, 1);
 
 
 %% ===== CREATE EMPTY CHANNEL FILE =====
 ChannelMat = db_template('channelmat');
 ChannelMat.Comment = 'Blackrock channels';
-ChannelMat.Channel = repmat(db_template('channeldesc'), [1, hdr.ChannelCount]);
+ChannelMat.Channel = repmat(db_template('channeldesc'), [1, nChannels]);
 % For each channel
-for i = 1:hdr.ChannelCount
+for i = 1:nChannels
     chname = rec.ElectrodesInfo(i).Label;
     chname(chname == 0) = [];
     ChannelMat.Channel(i).Name    = strtrim(chname);
@@ -131,7 +134,7 @@ if ~isempty(NevFile)
     % Time factor
     tFactorNev = double(hdr.SamplingFreq) / double(nev.MetaTags.TimeRes);
     % Get spike event BST prefix
-    spikeEventPrefix = process_spikesorting_supervised('GetSpikesEventPrefix');
+    spikeEventPrefix = panel_spikes('GetSpikesEventPrefix');
     
     % Use spikes
     if ~isempty(nev.Data.Spikes.TimeStamp)
@@ -146,29 +149,45 @@ if ~isempty(NevFile)
             events(iEvt).reactTimes = [];
             events(iEvt).select     = 1;
             events(iEvt).times      = FixSamples(hdr, round((double(nev.Data.Spikes.TimeStamp(iOcc)) - 1) * tFactorNev)) ./ sFile.prop.sfreq;
-            events(iEvt).epochs     = ones(1, length(iOcc));
-            events(iEvt).channels   = cell(1, size(events(iEvt).times, 2));
-            events(iEvt).notes      = cell(1, size(events(iEvt).times, 2));
+            events(iEvt).epochs     = ones(1, size(events(iEvt).times, 2));
+            events(iEvt).channels   = [];
+            events(iEvt).notes      = [];
         end
     end
     
     % Use digitial IO
     if ~isempty(nev.Data.SerialDigitalIO.TimeStamp)
-        % Get on which electrode the spike is happening
-        allTypes = [nev.Data.SerialDigitalIO.Type', nev.Data.SerialDigitalIO.Value'];
+        % Get events
+        if ~isempty(nev.Data.SerialDigitalIO.Value) && ~isempty(nev.Data.SerialDigitalIO.Type)
+            allTypes = [nev.Data.SerialDigitalIO.Type', nev.Data.SerialDigitalIO.Value'];
+            isUnparsed = 0;
+        elseif ~isempty(nev.Data.SerialDigitalIO.UnparsedData)
+            eventCodes = double(nev.Data.SerialDigitalIO.UnparsedData);
+            eventCodes = eventCodes - min(eventCodes);
+            eventCodes(eventCodes == 0) = [];
+            nev.Data.SerialDigitalIO.TimeStamp(eventCodes == 0) = [];
+            allTypes = repmat(eventCodes(:), 1, 2);
+            isUnparsed = 1;
+        else
+            allTypes = [];
+        end
         uniqueType = unique(allTypes, 'rows');
         % Create one group per electrode
         for i = 1:size(uniqueType,1)
             iEvt = length(events) + 1;
             iOcc = ((allTypes(:,1) == uniqueType(i,1)) & (allTypes(:,2) == uniqueType(i,2)));
-            events(iEvt).label      = sprintf('%d-%d', uniqueType(i,1), uniqueType(i,2));
+            if isUnparsed
+                events(iEvt).label = sprintf('D%d', uniqueType(i,1));
+            else
+                events(iEvt).label = sprintf('%d-%d', uniqueType(i,1), uniqueType(i,2));
+            end
             events(iEvt).color      = [];
             events(iEvt).reactTimes = [];
             events(iEvt).select     = 1;
             events(iEvt).times      = FixSamples(hdr, round((double(nev.Data.SerialDigitalIO.TimeStamp(iOcc)) - 1) * tFactorNev)) ./ sFile.prop.sfreq;
-            events(iEvt).epochs     = ones(1, length(iOcc));
-            events(iEvt).channels   = cell(1, size(events(iEvt).times, 2));
-            events(iEvt).notes      = cell(1, size(events(iEvt).times, 2));
+            events(iEvt).epochs     = ones(1, size(events(iEvt).times, 2));
+            events(iEvt).channels   = [];
+            events(iEvt).notes      = [];
         end
     end
     
@@ -192,9 +211,9 @@ if ~isempty(NevFile)
             events(iEvt).reactTimes = [];
             events(iEvt).select     = 1;
             events(iEvt).times      = FixSamples(hdr, round((double(nev.Data.Comments.TimeStamp(iOcc)) - 1) * tFactorNev)) ./ sFile.prop.sfreq;
-            events(iEvt).epochs     = ones(1, length(iOcc));
-            events(iEvt).channels   = cell(1, size(events(iEvt).times, 2));
-            events(iEvt).notes      = cell(1, size(events(iEvt).times, 2));
+            events(iEvt).epochs     = ones(1, size(events(iEvt).times, 2));
+            events(iEvt).channels   = [];
+            events(iEvt).notes      = [];
         end
     end
     
@@ -211,9 +230,9 @@ if ~isempty(NevFile)
             events(iEvt).reactTimes = [];
             events(iEvt).select     = 1;
             events(iEvt).times      = FixSamples(hdr, round((double(nev.Data.PatientTrigger.TimeStamp(iOcc)) - 1) * tFactorNev)) ./ sFile.prop.sfreq;
-            events(iEvt).epochs     = ones(1, length(iOcc));
-            events(iEvt).channels   = cell(1, size(events(iEvt).times, 2));
-            events(iEvt).notes      = cell(1, size(events(iEvt).times, 2));
+            events(iEvt).epochs     = ones(1, size(events(iEvt).times, 2));
+            events(iEvt).channels   = [];
+            events(iEvt).notes      = [];
         end
     end
 
@@ -235,8 +254,8 @@ if (length(hdr.DataPoints) > 1)
         events(iEvt).select     = 1;
         events(iEvt).times      = timeBlocks(iEvt);
         events(iEvt).epochs     = 1;
-        events(iEvt).channels   = {[]};
-        events(iEvt).notes      = {[]};
+        events(iEvt).channels   = [];
+        events(iEvt).notes      = [];
     end
     sFile = import_events(sFile, [], events);
 end

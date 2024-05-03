@@ -20,7 +20,7 @@ function TessMat = in_tess_off(TessFile)
 % This function is part of the Brainstorm software:
 % https://neuroimage.usc.edu/brainstorm
 % 
-% Copyright (c)2000-2020 University of Southern California & McGill University
+% Copyright (c) University of Southern California & McGill University
 % This software is distributed under the terms of the GNU General Public License
 % as published by the Free Software Foundation. Further details on the GPLv3
 % license can be found at http://www.gnu.org/copyleft/gpl.html.
@@ -59,7 +59,7 @@ nFaces    = dim(2);
 Vertices = double(fscanf(fid, '%f', [3 nVertices]));
 % Go to next line
 fgetl(fid);
-% Read faces
+% Read faces, add 1 (convert to 1-based indices)
 Faces = double(fscanf(fid, '%f',[4 nFaces]) + 1);
 Faces = Faces(2:4,:);
 % Close file

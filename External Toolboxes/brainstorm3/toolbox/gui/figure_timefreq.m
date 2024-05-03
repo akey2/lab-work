@@ -9,7 +9,7 @@ function varargout = figure_timefreq( varargin )
 % This function is part of the Brainstorm software:
 % https://neuroimage.usc.edu/brainstorm
 % 
-% Copyright (c)2000-2020 University of Southern California & McGill University
+% Copyright (c) University of Southern California & McGill University
 % This software is distributed under the terms of the GNU General Public License
 % as published by the Free Software Foundation. Further details on the GPLv3
 % license can be found at http://www.gnu.org/copyleft/gpl.html.
@@ -753,13 +753,13 @@ function DisplayFigurePopup(hFig)
         jItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_T, KeyEvent.CTRL_MASK));
     end
     % === View RECORDINGS ===
-    if ~isempty(sTimefreq.DataFile) && strcmpi(DataType, 'data')
+    if ~isempty(sTimefreq.DataFile) && strcmpi(DataType, 'data') && isempty(strfind(TfInfo.FileName, '_mtmconvol'))
         jPopup.addSeparator();
-        jItem = gui_component('MenuItem', jPopup, [], 'Recordings', IconLoader.ICON_TS_DISPLAY, [], @(h,ev)view_timeseries(sTimefreq.DataFile));
+        jItem = gui_component('MenuItem', jPopup, [], 'Recordings', IconLoader.ICON_TS_DISPLAY, [], @(h,ev)bst_call(@view_timeseries, sTimefreq.DataFile));
         jItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_R, KeyEvent.CTRL_MASK));
     end
     % === View RECORDINGS (one sensor) ===
-    if ~isempty(sTimefreq.DataFile) && strcmpi(DataType, 'data') && ~ismember(FigId.SubType, {'2DLayout', '2DLayoutOpt', 'AllSensors'})
+    if ~isempty(sTimefreq.DataFile) && strcmpi(DataType, 'data') && ~ismember(FigId.SubType, {'2DLayout', '2DLayoutOpt', 'AllSensors'}) && isempty(strfind(TfInfo.FileName, '_mtmconvol'))
         jItem = gui_component('MenuItem', jPopup, [], 'Recordings (one sensor)', IconLoader.ICON_TS_DISPLAY, [], @(h,ev)ShowTimeSeries(hFig));
         jItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0));
     end
@@ -914,20 +914,34 @@ function [Time, Freqs, TfInfo, TF, RowNames, FullTimeVector, DataType, LowFreq, 
     % Only if requested
     if (nargout >= 4)
         % For FOOOF with overlay mode, start with first sensor.
-        isFooof = isfield(GlobalData.DataSet(iDS).Timefreq(iTimefreq).Options, 'FOOOF') && ~isempty(GlobalData.DataSet(iDS).Timefreq(iTimefreq).Options.FOOOF);
-        if isFooof 
-            if isequal(TfInfo.FOOOFDisp, 'overlay') 
-                if isempty(TfInfo.RowName)
+        isFooof = isfield(GlobalData.DataSet(iDS).Timefreq(iTimefreq).Options, 'FOOOF') && all(ismember({'options', 'freqs', 'data', 'peaks', 'aperiodics', 'stats'}, fieldnames(GlobalData.DataSet(iDS).Timefreq(iTimefreq).Options.FOOOF)));
+        isSPRiNT = isfield(GlobalData.DataSet(iDS).Timefreq(iTimefreq).Options, 'SPRiNT') && ~isempty(GlobalData.DataSet(iDS).Timefreq(iTimefreq).Options.SPRiNT);
+        if isFooof || isSPRiNT
+            if isequal(TfInfo.FOOOFDisp, 'overlay')
+                if isSPRiNT % Does not use the overlay feature
+                    TfInfo.FOOOFDisp = 'spectrum';
+                end
+                if isfield(getappdata(hFig),'TopoInfo')
+                    TfInfo.FOOOFDisp = 'spectrum';
+                    TfInfo.RowName = [];
+                elseif isempty(TfInfo.RowName)
                     TfInfo.RowName = GlobalData.DataSet(iDS).Timefreq(iTimefreq).RowNames(1);
-                %elseif iscell(TfInfo.RowName) && numel(TfInfo.RowName) > 1 % doesn't seem to happen
-                %    TfInfo.RowName = TfInfo.RowName(1);
                 end
             else
-                TfInfo.RowName = [];
+                if isFooof
+                    TfInfo.RowName = [];
+                end
             end
             setappdata(hFig, 'Timefreq', TfInfo);
             % Get data, providing FOOOFDisp.
-            [TF, iTimeBands, iRow] = bst_memory('GetTimefreqValues', iDS, iTimefreq, TfInfo.RowName, TfInfo.iFreqs, iTime, TfInfo.Function, TfInfo.RefRowName, TfInfo.FOOOFDisp);
+            [TF, iTimeBands, iRow] = bst_memory('GetTimefreqValues', iDS, iTimefreq, TfInfo.RowName, TfInfo.iFreqs, iTime, TfInfo.Function, TfInfo.RefRowName, TfInfo.FOOOFDisp);       
+            % Keep FT and Freqs up to maximum frequency for FOOOF analysis
+            if TfInfo.FOOOFDispRange
+                freqMax = GlobalData.DataSet(iDS).Timefreq(iTimefreq).Options.FOOOF.options.freq_range(2);
+                iFreqMax = find(Freqs > freqMax, 1, 'first');
+                TF = TF(:,:,1:iFreqMax);
+                Freqs = Freqs(1:iFreqMax);
+            end
         else
             % Override figure definition and get all rows
             % Get data
@@ -956,18 +970,18 @@ function [Time, Freqs, TfInfo, TF, RowNames, FullTimeVector, DataType, LowFreq, 
         % Keep only the selected (good) channels
         % This won't apply when displaying a single channel (e.g. FOOOF overlay mode)
         % or when displaying connectivity matrices, or any PSD not computed directly on sensor data
-        [hFig, iFig] = bst_figures('GetFigure', hFig);
-        if ~isempty(GlobalData.DataSet(iDS).Figure(iFig).SelectedChannels) && ...
-                numel(GlobalData.DataSet(iDS).Figure(iFig).SelectedChannels) < numel(iRow) && ...
+        [hFig, iFig, iDSFig] = bst_figures('GetFigure', hFig);
+        if ~isempty(GlobalData.DataSet(iDSFig).Figure(iFig).SelectedChannels) && ...
+                numel(GlobalData.DataSet(iDSFig).Figure(iFig).SelectedChannels) < numel(iRow) && ...
                 strcmpi(DataType, 'data') && isempty(GlobalData.DataSet(iDS).Timefreq(iTimefreq).RefRowNames)
             % Grad norm: need to return both gradiometers
-            if strcmpi(GlobalData.DataSet(iDS).Figure(iFig).Id.Modality, 'MEG GRADNORM')
-                selBaseName = cellfun(@(c)cat(2, {[c(1:end-1) '2']}, {[c(1:end-1) '3']}), {GlobalData.DataSet(iDS).Channel(GlobalData.DataSet(iDS).Figure(iFig).SelectedChannels).Name}, 'UniformOutput', false);
+            if strcmpi(GlobalData.DataSet(iDSFig).Figure(iFig).Id.Modality, 'MEG GRADNORM')
+                selBaseName = cellfun(@(c)cat(2, {[c(1:end-1) '2']}, {[c(1:end-1) '3']}), {GlobalData.DataSet(iDS).Channel(GlobalData.DataSet(iDSFig).Figure(iFig).SelectedChannels).Name}, 'UniformOutput', false);
                 selBaseName = [selBaseName{:}];
                 iSelected = ismember(RowNames, selBaseName);
             % Regular sensor selection
             else
-                iSelected = ismember(RowNames, {GlobalData.DataSet(iDS).Channel(GlobalData.DataSet(iDS).Figure(iFig).SelectedChannels).Name});
+                iSelected = ismember(RowNames, {GlobalData.DataSet(iDS).Channel(GlobalData.DataSet(iDSFig).Figure(iFig).SelectedChannels).Name});
             end
             % Return only selected sensors
             TF = TF(iSelected,:,:);
@@ -1049,9 +1063,20 @@ function UpdateFigurePlot(hFig, isForced)
     % Get figure colormap
     ColormapInfo = getappdata(hFig, 'Colormap');
     sColormap = bst_colormaps('GetColormap', ColormapInfo.Type);
-    % Displaying LOG values: always use the "RealMin" display
-    if strcmpi(TfInfo.Function, 'log')
-        sColormap.isRealMin = 1;
+    % Displaying LOG values   : always use the "RealMin" display and not absolutes values
+    % Displaying Power values : always use absolutes values
+    if ~isempty(TfInfo) && strcmpi(ColormapInfo.Type, 'timefreq')
+        isAbsoluteValues = sColormap.isAbsoluteValues;
+        if strcmpi(TfInfo.Function, 'log')
+            sColormap.isRealMin = 1;
+            isAbsoluteValues = 0;
+        elseif strcmpi(TfInfo.Function, 'power')
+            isAbsoluteValues = 1;
+        end
+        if isAbsoluteValues ~= sColormap.isAbsoluteValues
+            sColormap.isAbsoluteValues = isAbsoluteValues;
+            bst_colormaps('SetColormap', ColormapInfo.Type, sColormap);
+        end
     end
     % Get figure maximum
     MinMaxVal = bst_colormaps('GetMinMax', sColormap, TF, TopoHandles.DataMinMax);
@@ -1091,8 +1116,10 @@ function UpdateFigurePlot(hFig, isForced)
                 PlotTimefreqSurfHigh(hAxes, Time, Freqs, TF, TFmask);
             elseif TfInfo.DisplayAsDots
                 PlotTimefreqAsDots(hAxes, Time, TF);
-            elseif TfInfo.DisplayAsPhase
-                PlotTimefreqAsPhase(hAxes, Time, Freqs, TF);
+            elseif TfInfo.DisplayAsPhase                
+                phase_info = in_bst_timefreq(TfInfo.FileName, 0, 'neurons', 'RowNames');
+                iNeuron = find(ismember(phase_info.RowNames, RowNames));
+                PlotTimefreqAsPhase(hAxes, Time, Freqs, TF, phase_info.neurons.phase, iNeuron);
             else
                 PlotTimefreqSurf(hAxes, Time, FullTimeVector, Freqs, TF, TFmask);
             end
@@ -1234,7 +1261,7 @@ end
 
 
 %% ===== PLOT TIME-FREQ AS PHASE =====
-function hSurf = PlotTimefreqAsPhase(hAxes, Time, Freqs, TF)
+function hSurf = PlotTimefreqAsPhase(hAxes, Time, Freqs, TF, phase_info, iNeuron)
     % Delete previous objects
     surfTag = 'TimefreqSurf';
     hOld = findobj(hAxes, '-depth', 1, 'tag', surfTag);
@@ -1255,7 +1282,7 @@ function hSurf = PlotTimefreqAsPhase(hAxes, Time, Freqs, TF)
 
     hSurf = circ_plot(single_neuron_and_channel_phase,'hist',[], nBins,true,true,'linewidth',2,'color','r','Parent', hAxes);
     set(hSurf, 'Tag', surfTag);
-    title(hAxes, {['Rayleigh test p=' num2str(pval_rayleigh)], ['Omnibus test p=' num2str(pval_omnibus)], ['Preferred phase: ' num2str(mean_value_degrees) '^o']})
+    title(hAxes, {['Total neurons: ' num2str(phase_info.total_spikes(iNeuron))],['Rayleigh test p=' num2str(pval_rayleigh)], ['Preferred phase: ' num2str(mean_value_degrees) '^o']})
 end
 
 

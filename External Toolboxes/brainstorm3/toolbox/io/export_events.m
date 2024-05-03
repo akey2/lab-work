@@ -14,7 +14,7 @@ function export_events(sFile, ChannelMat, OutputFile)
 % This function is part of the Brainstorm software:
 % https://neuroimage.usc.edu/brainstorm
 % 
-% Copyright (c)2000-2020 University of Southern California & McGill University
+% Copyright (c) University of Southern California & McGill University
 % This software is distributed under the terms of the GNU General Public License
 % as published by the Free Software Foundation. Further details on the GPLv3
 % license can be found at http://www.gnu.org/copyleft/gpl.html.
@@ -74,6 +74,8 @@ if isempty(OutputFile)
     end
     % Get default extension
     switch (DefaultFormats.EventsOut)
+        case 'ANYWAVE'
+            OutputFile = bst_fullfile(fPath, [fBase, '.mrk']);
         case 'BST'
             OutputFile = bst_fullfile(fPath, ['events_' fBase '.mat']);
         case 'BRAINAMP'
@@ -99,15 +101,7 @@ if isempty(OutputFile)
         'Export events...', ...  % Window title
         OutputFile, ...          % Default filename
         'single', 'files', ...   % Selection mode
-        {{'_events'},       'Brainstorm (events*.mat)',     'BST'; ...
-         {'.vmrk'},         'BrainVision BrainAmp (*.vmrk)', 'BRAINAMP'; ...
-         {'.mrk'},          'CTF MarkerFile (*.mrk)',       'CTF'; ...
-         {'.eve','.fif'},   'Elekta-Neuromag/MNE (*.eve)',  'FIF'; ...
-         {'.evl'},          'Elekta-Neuromag Graph (Alternative Style) (*.evl)', 'GRAPH_ALT'; ...
-         {'.txt'},          'Array of times (*.txt)',       'ARRAY-TIMES'; ... 
-         {'.txt'},          'Array of samples (*.txt)',     'ARRAY-SAMPLES'; ...
-         {'.txt','.csv'},   'CSV text file: label, time, duration (*.txt;*.csv)', 'CSV-TIME'; ...
-         {'.txt'},          'CTF Video Times (*.txt)',      'CTFVIDEO'}, ...
+        bst_get('FileFilters', 'eventsout'), ...
          DefaultFormats.EventsOut);
     % If no file was selected: exit
     if isempty(OutputFile)
@@ -127,6 +121,7 @@ else
         case '.evl',   FileFormat = 'GRAPH_ALT';
         case '.txt',   FileFormat = 'ARRAY-TIMES';
         case '.csv',   FileFormat = 'CSV-TIME';
+        case '.tsv',   FileFormat = 'BIDS';
     end
 end
 
@@ -136,6 +131,8 @@ end
 bst_progress('start', 'Export events', 'Saving file...');
 % Switch between file formats
 switch FileFormat
+    case 'ANYWAVE'
+        out_events_anywave(sFile, OutputFile);
     case 'BST'
         s.events = sFile.events;
         bst_save(OutputFile, s, 'v7');
@@ -152,6 +149,8 @@ switch FileFormat
         out_events_graph(sFile, OutputFile,'alternativeStyle');
     case 'CSV-TIME'
         out_events_csv(sFile, OutputFile);
+   case 'BIDS'
+        out_events_bids(sFile, OutputFile);
     case 'ARRAY-TIMES'
         if (length(sFile.events) > 1)
             error('Cannot export more than one event at a time with this format.');

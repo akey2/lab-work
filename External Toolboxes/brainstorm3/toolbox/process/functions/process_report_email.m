@@ -8,7 +8,7 @@ function varargout = process_report_email( varargin )
 % This function is part of the Brainstorm software:
 % https://neuroimage.usc.edu/brainstorm
 % 
-% Copyright (c)2000-2020 University of Southern California & McGill University
+% Copyright (c) University of Southern California & McGill University
 % This software is distributed under the terms of the GNU General Public License
 % as published by the Free Software Foundation. Further details on the GPLv3
 % license can be found at http://www.gnu.org/copyleft/gpl.html.
@@ -55,6 +55,11 @@ function sProcess = GetDescription() %#ok<DEFNU>
     sProcess.options.subject.Comment = 'Subject: ';
     sProcess.options.subject.Type    = 'text';
     sProcess.options.subject.Value   = 'Process completed';
+    % === REPORTFILE
+    sProcess.options.reportfile.Comment = 'ReportFile: ';
+    sProcess.options.reportfile.Type    = 'text';
+    sProcess.options.reportfile.Value   = 'current'; 
+    sProcess.options.reportfile.Hidden  = 1; 
     % === FULL REPORT
     sProcess.options.full.Comment = 'Send full report';
     sProcess.options.full.Type    = 'checkbox';
@@ -89,10 +94,12 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
     if isempty(subject)
         subject = 'Brainstorm report';
     end
+    % Report file
+    reportfile = sProcess.options.reportfile.Value;        
     % Full report
     isFullReport = sProcess.options.full.Value;
     % Send email
-    [isOk, resp] = bst_report('Email', 'current', username, cc, subject, isFullReport);
+    [isOk, resp] = bst_report('Email', reportfile, username, cc, subject, isFullReport);
     % Error handling
     if ~isOk
         bst_report('Error', sProcess, [], ['Email could not be sent: ' 10 resp]);

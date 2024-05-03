@@ -18,7 +18,7 @@ function [sMriT1, errMsg] = bst_normalize_mni(T1File, Method, T2File)
 % This function is part of the Brainstorm software:
 % https://neuroimage.usc.edu/brainstorm
 % 
-% Copyright (c)2000-2020 University of Southern California & McGill University
+% Copyright (c) University of Southern California & McGill University
 % This software is distributed under the terms of the GNU General Public License
 % as published by the Free Software Foundation. Further details on the GPLv3
 % license can be found at http://www.gnu.org/copyleft/gpl.html.
@@ -32,7 +32,7 @@ function [sMriT1, errMsg] = bst_normalize_mni(T1File, Method, T2File)
 % For more information type "brainstorm license" at command prompt.
 % =============================================================================@
 %
-% Authors: Francois Tadel, 2015-2021
+% Authors: Francois Tadel, 2015-2023
 
 %% ===== PARSE INPUTS =====
 % Inializations
@@ -80,18 +80,18 @@ end
 bst_plugin('SetProgressLogo', 'spm12');
 % Get template file
 TpmFile = bst_get('SpmTpmAtlas');
-% If it does not exist: download
-if isempty(TpmFile) || ~file_exist(TpmFile)
-    % Create folder
-    if ~file_exist(bst_fileparts(TpmFile))
-        mkdir(bst_fileparts(TpmFile));
-    end
+% If it is not found: download
+if isempty(TpmFile)
     % URL to download
-    tmpUrl = 'http://neuroimage.usc.edu/bst/getupdate.php?t=SPM_TPM';
+    tpmUrl = 'http://neuroimage.usc.edu/bst/getupdate.php?t=SPM_TPM';
     % Path to downloaded file
-    tpmZip = bst_fullfile(bst_get('BrainstormUserDir'), 'defaults', 'spm', 'SPM_TPM');
+    tpmZip = bst_fullfile(bst_get('BrainstormUserDir'), 'defaults', 'spm', 'SPM_TPM.zip');
+    % Create 'spm' folder if needed
+    if ~isdir(bst_fileparts(tpmZip))
+        mkdir(bst_fileparts(tpmZip));
+    end
     % Download file
-    errMsg = gui_brainstorm('DownloadFile', tmpUrl, tpmZip, 'Download template');
+    errMsg = gui_brainstorm('DownloadFile', tpmUrl, tpmZip, 'Download template');
     % Error message
     if ~isempty(errMsg)
         errMsg = ['Impossible to download template:' 10 errMsg];
@@ -99,7 +99,7 @@ if isempty(TpmFile) || ~file_exist(TpmFile)
     end
     % Progress bar
     bst_progress('text', 'Importing SPM template...');
-    % URL: Download zip file
+    % Unzip file
     try
         unzip(tpmZip, bst_fileparts(tpmZip));
     catch
@@ -115,7 +115,7 @@ if isempty(TpmFile) || ~file_exist(TpmFile)
     file_delete(tpmZip, 1);
     % Get template file
     TpmFile = bst_get('SpmTpmAtlas');
-    if isempty(TpmFile) || ~file_exist(TpmFile)
+    if isempty(TpmFile)
         errMsg = 'Missing file TPM.nii';
         return;
     end
@@ -208,17 +208,22 @@ end
 % If the MRI is currently loaded
 if ~isempty(iLoadedMri)
     % Update structures
-    GlobalData.Mri(iLoadedMri).NCS.R  = sMriT1.NCS.R;
-    GlobalData.Mri(iLoadedMri).NCS.T  = sMriT1.NCS.T;
     GlobalData.Mri(iLoadedMri).NCS.AC = sMriT1.NCS.AC;
     GlobalData.Mri(iLoadedMri).NCS.PC = sMriT1.NCS.PC;
     GlobalData.Mri(iLoadedMri).NCS.IH = sMriT1.NCS.IH;
     GlobalData.Mri(iLoadedMri).NCS.Origin = sMriT1.NCS.Origin;
+    % Linear MNI transformation
+    if isfield(sMriT1.NCS,'R') && isfield(sMriT1.NCS,'T')
+        GlobalData.Mri(iLoadedMri).NCS.R  = sMriT1.NCS.R;
+        GlobalData.Mri(iLoadedMri).NCS.T  = sMriT1.NCS.T;
+    end
+    % Non-linear MNI transformtion
     if isfield(sMriT1.NCS,'y') && isfield(sMriT1.NCS,'iy') && isfield(sMriT1.NCS,'y_vox2ras')
         GlobalData.Mri(iLoadedMri).NCS.y         = sMriT1.NCS.y;
         GlobalData.Mri(iLoadedMri).NCS.iy        = sMriT1.NCS.iy;
         GlobalData.Mri(iLoadedMri).NCS.y_vox2ras = sMriT1.NCS.y_vox2ras;
     end
+    % SCS coordinates
     GlobalData.Mri(iLoadedMri).SCS.R   = sMriT1.SCS.R;
     GlobalData.Mri(iLoadedMri).SCS.T   = sMriT1.SCS.T;
     GlobalData.Mri(iLoadedMri).SCS.NAS = sMriT1.SCS.NAS;
@@ -236,6 +241,8 @@ if ~isempty(TpmFiles) && ~isempty(T1File)
     [sSubject, iSubject] = bst_get('MriFile', T1File);
     % Import tissue classification
     import_mri(iSubject, TpmFiles, 'SPM-TPM', 0, 1, 'tissues_segment');
+    % Delete the temporary folder
+    file_delete(bst_fileparts(TpmFiles{1}), 1, 1);
 end
 
 % Close progress bar

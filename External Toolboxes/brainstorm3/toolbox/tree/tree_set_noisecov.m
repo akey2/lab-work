@@ -11,7 +11,7 @@ function tree_set_noisecov(bstNodes, NoiseCovFile, isDataCov)
 % This function is part of the Brainstorm software:
 % https://neuroimage.usc.edu/brainstorm
 % 
-% Copyright (c)2000-2020 University of Southern California & McGill University
+% Copyright (c) University of Southern California & McGill University
 % This software is distributed under the terms of the GNU General Public License
 % as published by the Free Software Foundation. Further details on the GPLv3
 % license can be found at http://www.gnu.org/copyleft/gpl.html.
@@ -73,16 +73,20 @@ if ~isempty(iTargetStudies)
         % === IMPORT FROM MATLAB ===
         elseif strcmpi(NoiseCovFile, 'MatlabVar')
             % Get matlab variable
-            NoiseCovMat.Comment = 'Noise covariance (Matlab)';
             [NoiseCovMat.NoiseCov, varname] = in_matlab_var();
             % Check if import was cancelled
             if isempty(NoiseCovMat.NoiseCov)
                 return
             end
-            % Check if input was already a structure
+            % Check if input was already a Brainstorm structure
             if isstruct(NoiseCovMat.NoiseCov) && isfield(NoiseCovMat.NoiseCov, 'NoiseCov')
-                NoiseCovMat.NoiseCov = NoiseCovMat.NoiseCov.NoiseCov;
+                NoiseCovMat = struct_copy_fields(db_template('noisecovmat'), NoiseCovMat.NoiseCov);
+                if ~isempty(NoiseCovMat.History)
+                    NoiseCovMat.History = [];
+                end
             end
+            % Update comment
+            NoiseCovMat.Comment = 'Noise covariance (Matlab)';
             % History: Import from Matlab
             NoiseCovMat = bst_history('add', NoiseCovMat, 'import', ['Import from Matlab variable: ' varname]);
             % Save in database

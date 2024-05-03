@@ -7,8 +7,10 @@ function [OutputFile, errorMsg] = import_sources(iStudy, SurfaceFile, SourceFile
 %    - iStudy       : Index of the study where to import the SourceFiles
 %    - SurfaceFile  : Surface from the Brainstorm database on which the maps have to be displayed
 %    - SourceFiles  : Full filename, or cell array of filenames, of the source maps to import
-%                     => if not specified : file to import is asked to the user
+%                     => if not specified : file to import is asked to the user who should select
+%                     the left and right files at the same time
 %    - SourceFiles2 : In the case of left/right files to import as one joined matrix (FreeSurfer import)
+%                     SourceFiles = left files and SourceFiles2 = right files
 %    - FileFormat   : One of the available file formats ('FS')
 %    - Comment      : Comment of the output file
 %    - DisplayUnits : What to save in the field DisplayUnits of the new files
@@ -17,7 +19,7 @@ function [OutputFile, errorMsg] = import_sources(iStudy, SurfaceFile, SourceFile
 % This function is part of the Brainstorm software:
 % https://neuroimage.usc.edu/brainstorm
 % 
-% Copyright (c)2000-2020 University of Southern California & McGill University
+% Copyright (c) University of Southern California & McGill University
 % This software is distributed under the terms of the GNU General Public License
 % as published by the Free Software Foundation. Further details on the GPLv3
 % license can be found at http://www.gnu.org/copyleft/gpl.html.
@@ -32,6 +34,7 @@ function [OutputFile, errorMsg] = import_sources(iStudy, SurfaceFile, SourceFile
 % =============================================================================@
 %
 % Authors: Francois Tadel, 2013-2017
+%          Raymundo Cassani, 2023
 
 %% ===== PARSE INPUTS =====
 % Initialize returned variables
@@ -86,8 +89,10 @@ if isempty(SourceFiles)
             LastUsedDirs.ImportData, ...    % Last used directory
             'multiple', 'files', ...        % Selection mode
             {{'*'}, 'FreeSurfer maps (*.*)',    'FS'; ...
+             {'*.w'}, 'FreeSurfer weight files (*.w)',    'FS-WFILE'; ...
              {'*'}, 'CIVET maps (*.*)',         'CIVET'; ...
              {'.gii'}, 'GIfTI texture (*.gii)', 'GII'; ...
+             {'_sources.mat'}, 'Brainstorm sources (*sources*.mat)', 'BST'; ...
              {'.mri', '.fif', '.img', '.ima', '.nii', '.mgh', '.mgz', '.mnc', '.mni', '.gz', '_subjectimage'}, 'Volume grids (subject space)', 'ALLMRI'; ...
              {'.mri', '.fif', '.img', '.ima', '.nii', '.mgh', '.mgz', '.mnc', '.mni', '.gz', '_subjectimage'}, 'Volume grids (MNI space)',     'ALLMRI-MNI'; ...
             }, DefaultFormats.ResultsIn);
@@ -104,6 +109,39 @@ if isempty(SourceFiles)
     % Save default import format
     DefaultFormats.ResultsIn = FileFormat;
     bst_set('DefaultFormats', DefaultFormats);
+    % Make hemispheres pairs
+    if length(SourceFiles) > 1
+        [~, baseSourceFiles, extSourceFiles] = cellfun(@(std) bst_fileparts(std), SourceFiles, 'UniformOutput', false);
+        shortSourceFiles = strcat(baseSourceFiles, extSourceFiles);
+        % Find left- and right-hemisphere files
+        leftFileIxs  = find(cellfun(@(std) ~isempty(regexp(std,'(lh\.|_left)', 'once')), shortSourceFiles));
+        rightFileIxs = find(cellfun(@(std) ~isempty(regexp(std,'(rh\.|_right)', 'once')), shortSourceFiles));
+        % Check for paired files
+        if ~isempty(leftFileIxs) && ~isempty(rightFileIxs) && isempty(intersect(leftFileIxs, rightFileIxs))
+            SourceFiles1 = [];
+            cleanLeftNames  = cellfun(@(std) strrep(strrep(std, 'lh.', ''), '_left', ''), shortSourceFiles(leftFileIxs), 'UniformOutput', false);
+            cleanRightNames = cellfun(@(std) strrep(strrep(std, 'rh.', ''), '_right', '') , shortSourceFiles(rightFileIxs), 'UniformOutput', false);
+            % Intersect of clean names must be the same
+            if isequal(sort(cleanLeftNames), sort(cleanRightNames))
+                % Find corresponding right file
+                for iLeft = 1 : length(cleanLeftNames)
+                    cleanLeftName = cleanLeftNames{iLeft};
+                    rightFileIx   = strcmp(cleanLeftName, cleanRightNames);
+                    SourceFiles1{end+1} = SourceFiles{leftFileIxs(iLeft)};
+                    SourceFiles2{end+1}  = SourceFiles{rightFileIxs(rightFileIx)};
+                end
+                SourceFiles = SourceFiles1;
+            else
+                errorMsg = 'Left and right hemisphere files must be provided in pairs.';
+                bst_error(errorMsg, 'Import source maps', 0);
+            end
+            % Check matching sizes of SourceFiles and SourceFiles2
+            if ~isempty(SourceFiles2) && (length(SourceFiles2) ~= length(SourceFiles))
+                errorMsg = 'Length of arguments SourceFiles and SourceFiles2 must match.';
+                bst_error(errorMsg, 'Import source maps', 0);
+            end
+        end
+    end
 end
 
 
@@ -167,9 +205,12 @@ if isempty(SurfaceFile) && ~ismember(FileFormat, {'ALLMRI', 'ALLMRI-MNI'})
     return;
 end
 % Load cortex
-if ~isempty(SurfaceFile)   
-    varVertices = whos('-file', file_fullpath(SurfaceFile), 'Vertices');
-    nVertices = varVertices.size(1);
+if ~isempty(SurfaceFile)
+    sSurf = in_tess_bst(SurfaceFile);
+    nVertices = size(sSurf.Vertices,1);
+    [rH, lH] = tess_hemisplit(sSurf);
+    nVerticesLeft =  length(lH);
+    nVerticesRight =  length(rH);
 end
 
 
@@ -183,13 +224,17 @@ for iFile = 1:length(SourceFiles)
     % Comment: Use the base filename (if not defined in input)
     [fPath, fBase, fExt] = bst_fileparts(SourceFiles{iFile});
     if isempty(Comment)
-        if strcmpi(FileFormat, 'FS')
+        if strncmpi(FileFormat, 'FS', 2)
             Comment = [fBase, fExt];
         else
             Comment = fBase;
         end
         Comment = strrep(Comment, 'results_', '');
         Comment = strrep(Comment, '_results', '');
+        if strcmp(FileFormat, 'BST')
+            Comment = strrep(Comment, 'surface_', '');
+            Comment = strrep(Comment, 'volume_', '');
+        end
         % If the two files are imported: remove .lh and .rh
         if ~isempty(SourceFiles2)
             Comment = strrep(Comment, 'rh.', '');
@@ -208,7 +253,7 @@ for iFile = 1:length(SourceFiles)
 
     % === LOAD FILE ===
     % Read source file
-    [maps{iFile}, grid, sMriSrc] = in_sources(SourceFiles{iFile}, FileFormat, bgValue);
+    [maps{iFile}, grid, sMriSrc] = in_sources(SourceFiles{iFile}, FileFormat, bgValue, nVerticesLeft);
     % In the case of a volume grid: convert from MRI coordinates to SCS
     if ~isempty(grid)
         % Load subject MRI
@@ -216,7 +261,7 @@ for iFile = 1:length(SourceFiles)
             sMri = in_mri_bst(sSubject.Anatomy(sSubject.iAnatomy).FileName);
         end
         % Convert from RAS(source files) to RAS(subject anat)
-        if isfield(sMri, 'InitTransf') && ~isempty(sMri.InitTransf) && ismember(sMri.InitTransf(:,1), 'vox2ras')
+        if isfield(sMri, 'InitTransf') && ~isempty(sMri.InitTransf) && ismember('vox2ras', sMri.InitTransf(:,1))
             iTransf = find(strcmpi(sMri.InitTransf(:,1), 'vox2ras'));
             ras2vox = inv(sMri.InitTransf{iTransf,2});
             grid = bst_bsxfun(@plus, ras2vox(1:3,1:3) * grid', ras2vox(1:3,4))';
@@ -226,7 +271,7 @@ for iFile = 1:length(SourceFiles)
     end
     % Read additional source file: simply concatenate to the previous one
     if ~isempty(SourceFiles2)
-        maps{iFile} = [maps{iFile}; in_sources(SourceFiles2{iFile}, FileFormat, bgValue)];
+        maps{iFile} = [maps{iFile}; in_sources(SourceFiles2{iFile}, FileFormat, bgValue, nVerticesRight)];
     end
     % Check the number of sources
     if isempty(maps{iFile})
@@ -277,7 +322,11 @@ if isStat
 else
     % New results structure
     ResultsMat = db_template('resultsmat');
-    ResultsMat.ImageGridAmp  = [map, map];
+    if size(map, 2) > 1
+        ResultsMat.ImageGridAmp  = map;
+    else
+        ResultsMat.ImageGridAmp  = [map, map];
+    end
     ResultsMat.ImagingKernel = [];
     FileType = 'results';
     % Time vector
@@ -334,12 +383,22 @@ end
 
 %% ====== SUPPORT FUNCTIONS =====
 % Load source map
-function [map, grid, sMriSrc] = in_sources(SourceFile, FileFormat, bgValue)
+function [map, grid, sMriSrc] = in_sources(SourceFile, FileFormat, bgValue, nVertices)
     grid = [];
     sMriSrc = [];
     switch (FileFormat)
         case 'FS'
             map = read_curv(SourceFile);
+        case 'FS-WFILE'
+            map = zeros(nVertices, 1);
+            [w,v] = read_wfile(SourceFile);
+            % Weight files are zero indexed
+            v = v + 1;
+            if max(v) > nVertices
+                map = [];
+            else
+                map(v) = w;
+            end
         case 'CIVET'
             map = load(SourceFile, '-ascii');
         case 'GII'
@@ -384,6 +443,9 @@ function [map, grid, sMriSrc] = in_sources(SourceFile, FileFormat, bgValue)
             end
         case 'ALLMRI-MNI'
             error('Not supported yet.');
+        case 'BST'
+            sResultsMat = load(SourceFile);
+            map = sResultsMat.ImageGridAmp;
         otherwise
             error('Unsupported file format.');
     end

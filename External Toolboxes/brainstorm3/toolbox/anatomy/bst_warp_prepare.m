@@ -19,7 +19,7 @@ function hFig = bst_warp_prepare(ChannelFile, Options)
 % This function is part of the Brainstorm software:
 % https://neuroimage.usc.edu/brainstorm
 % 
-% Copyright (c)2000-2020 University of Southern California & McGill University
+% Copyright (c) University of Southern California & McGill University
 % This software is distributed under the terms of the GNU General Public License
 % as published by the Free Software Foundation. Further details on the GPLv3
 % license can be found at http://www.gnu.org/copyleft/gpl.html.
@@ -33,7 +33,7 @@ function hFig = bst_warp_prepare(ChannelFile, Options)
 % For more information type "brainstorm license" at command prompt.
 % =============================================================================@
 %
-% Authors: Francois Tadel, 2010-2014
+% Authors: Francois Tadel, 2010-2022
 
 %% ===== CHECK PARAMETERS =====
 % Default options
@@ -156,7 +156,7 @@ if (~isempty(sSubject.Anatomy) || ~isempty(sSubject.Surface))
         file_delete(MriFiles, 1);
     end
 end
-% Force subject to us default anatomy
+% Force subject to use default anatomy
 s.UseDefaultAnat = 0;
 s.Anatomy = [];
 s.Surface = [];
@@ -251,11 +251,12 @@ end
 % Create list of files to process
 SurfaceFiles     = {sDefSubject.Surface.FileName};
 SurfaceFilesFull = cellfun(@(c)file_fullpath(c), SurfaceFiles, 'UniformOutput', 0);
-MriFileFull      = file_fullpath(sDefSubject.Anatomy(sDefSubject.iAnatomy).FileName);
+MriFiles         = {sDefSubject.Anatomy([sDefSubject.iAnatomy, setdiff(1:length(sDefSubject.Anatomy), sDefSubject.iAnatomy)]).FileName};
+MriFilesFull     = cellfun(@(c)file_fullpath(c), MriFiles, 'UniformOutput', 0);
 OutputTag        = '_warped';
 OutputDir        = bst_fileparts(file_fullpath(sSubject.FileName));
 % Main call
-[OutputSurfaces, OutputMri] = bst_warp(destPtsParam, srcPtsParam, SurfaceFilesFull, MriFileFull, OutputTag, OutputDir, Options.isSurfaceOnly);
+bst_warp(destPtsParam, srcPtsParam, SurfaceFilesFull, MriFilesFull, OutputTag, OutputDir, Options.isSurfaceOnly);
            
 
 %% ===== COPY ATLASES =====
@@ -267,10 +268,39 @@ for i = 1:length(dirScout)
     file_copy(bst_fullfile(atlasDir, dirScout(i).name), bst_fullfile(OutputDir, dirScout(i).name))
 end
 
-
 %% ===== UPDATE DATABASE =====
 % Reload subject
 db_reload_subjects(iSubject);
+
+%% ===== SET DEFAULT SURFACES =====
+isUpdate = 0;
+sSubject = bst_get('Subject', iSubject);
+for surfaceCatergory = {'Anatomy' 'Scalp', 'Cortex', 'InnerSkull', 'OuterSkull', 'Fibers', 'FEM'}
+    if strcmp('Anatomy', surfaceCatergory{1})
+        surfaceGroup = surfaceCatergory{1};
+    else
+        surfaceGroup = 'Surface';
+    end
+    if ~isempty(sDefSubject.(['i', surfaceCatergory{1}]))
+        defDefFilename = sDefSubject.(surfaceGroup)(sDefSubject.(['i', surfaceCatergory{1}])).FileName;
+        [~, filename, ext] = bst_fileparts(defDefFilename);
+        iDef = find(file_compare({sSubject.(surfaceGroup).FileName}, bst_fullfile(fileparts(sSubject.FileName), [filename, OutputTag, ext] )), 1);
+        if ~isempty(iDef)
+            sSubject.(['i', surfaceCatergory{1}]) = iDef;
+            matUpdate.(surfaceCatergory{1}) = bst_fullfile(fileparts(sSubject.FileName), [filename, OutputTag, ext]);
+            isUpdate = 1;
+        end
+    end
+end
+if isUpdate
+    % Update Database
+    bst_set('Subject', iSubject, sSubject);
+    % Update SubjectFile
+    bst_save(file_fullpath(sSubject.FileName), matUpdate, 'v7', 1);
+end
+
+
+%% ===== DISPLAY WARPED HEAD AND CORTEX =====
 % Unload all the surfaces, close all the figures
 bst_memory('UnloadAll', 'Forced');
 % Get subject again
