@@ -1,3 +1,7 @@
+% data - [N x M] N channels, M data points
+% time - [1 x M] M time points (in 30kHz samples)
+% meta - information structure
+
 function [data, time, meta] = ReadRippleFile(fname)
 
 %%% NEV File Format 2.2
@@ -115,7 +119,7 @@ while ~feof(fid)
         data{end + 1} = fread(fid, [nchans, ndatapts], "int16=>single");
         data{end} = ((data{end} - scale(1))/(scale(2) - scale(1)))*(scale(4)-scale(3)) + scale(3);
     end
-    time{end + 1} = timestart + 0:ndatapts-1;
+    time{end + 1} = timestart + (0:ndatapts-1)*period;
 
 end
 
