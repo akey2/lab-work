@@ -1,0 +1,27 @@
+[gd_scene load_steps=7 format=3 uid="uid://n8gw34804i"]
+
+[ext_resource type="Script" path="res://main.gd" id="1_5r6sd"]
+[ext_resource type="Script" path="res://VisScene.gd" id="3_7cbib"]
+[ext_resource type="Script" path="res://HomeTarget.gd" id="3_kni6s"]
+[ext_resource type="Script" path="res://ReachTarget_narrow.gd" id="4_twcub"]
+[ext_resource type="Script" path="res://ReachTarget_wide.gd" id="5_nc415"]
+[ext_resource type="Script" path="res://Cursor.gd" id="6_siiul"]
+
+[node name="Main" type="Node"]
+script = ExtResource("1_5r6sd")
+
+[node name="VisScene" type="Node" parent="."]
+script = ExtResource("3_7cbib")
+
+[node name="HomeTarget" type="Node2D" parent="VisScene"]
+script = ExtResource("3_kni6s")
+
+[node name="ReachTarget_narrow" type="Node2D" parent="VisScene"]
+script = ExtResource("4_twcub")
+
+[node name="ReachTarget_wide" type="Node2D" parent="VisScene"]
+script = ExtResource("5_nc415")
+
+[node name="Cursor" type="Node2D" parent="VisScene"]
+position = Vector2(611, 538)
+script = ExtResource("6_siiul")
