@@ -9,7 +9,7 @@ function varargout = process_segment_fastsurfer( varargin )
 % This function is part of the Brainstorm software:
 % https://neuroimage.usc.edu/brainstorm
 % 
-% Copyright (c)2000-2020 University of Southern California & McGill University
+% Copyright (c) University of Southern California & McGill University
 % This software is distributed under the terms of the GNU General Public License
 % as published by the Free Software Foundation. Further details on the GPLv3
 % license can be found at http://www.gnu.org/copyleft/gpl.html.
@@ -23,7 +23,7 @@ function varargout = process_segment_fastsurfer( varargin )
 % For more information type "brainstorm license" at command prompt.
 % =============================================================================@
 %
-% Authors: Francois Tadel, 2021
+% Authors: Francois Tadel, 2021-2023
 
 eval(macro_method);
 end
@@ -194,9 +194,11 @@ function [isOk, errMsg] = Compute(iSubject, iAnatomy, nVertices, isInteractive, 
     % ===== CHECK OUTPUT FOLDER =====
     % Folder for FastSurfer output
     if ~isempty(outdir)
+        TmpDir = [];
         procDir = outdir;
     else
-        procDir = bst_fullfile(bst_get('BrainstormTmpDir'), 'fastsurfer');
+        TmpDir = bst_get('BrainstormTmpDir', 0, 'fastsurfer');
+        procDir = TmpDir;
     end
     if ~file_exist(procDir)
         mkdir(procDir);
@@ -217,6 +219,22 @@ function [isOk, errMsg] = Compute(iSubject, iAnatomy, nVertices, isInteractive, 
         end
     end
     
+    % ===== DELETE EXISTING SURFACES =====
+    % Confirm with user that the existing surfaces will be removed
+    if isInteractive && ~isempty(sSubject.Surface)
+        isDel = java_dialog('confirm', ['Warning: There are already surfaces in this subject.' 10 ...
+            'Running FastSurfer will remove all the existing surfaces.' 10 10 ...
+            'Delete the existing files?' 10 10], 'FastSurfer segmentation');
+        if ~isDel
+            errMsg = 'Process aborted by user.';
+            % Delete temporary files
+            if ~isempty(TmpDir)
+                file_delete(TmpDir, 1, 1);
+            end
+            return;
+        end
+    end
+
     % ===== VERIFY FIDUCIALS IN MRI =====
     bst_progress('text', 'Saving temporary files...');
     % Load MRI file
@@ -271,9 +289,13 @@ function [isOk, errMsg] = Compute(iSubject, iAnatomy, nVertices, isInteractive, 
     isKeepMri = 1;
     isVolumeAtlas = 1;
     FsDir = bst_fullfile(procDir, subjid);
-    errMsg = import_anatomy_fs(iSubject, FsDir, nVertices, isInteractive, [], isExtraMaps, isVolumeAtlas, isKeepMri);
+    errMsg = import_anatomy_fs(iSubject, FsDir, nVertices, 0, [], isExtraMaps, isVolumeAtlas, isKeepMri);
     if ~isempty(errMsg)
         return;
+    end
+    % Delete temporary files
+    if ~isempty(TmpDir)
+        file_delete(TmpDir, 1, 1);
     end
     % Return success
     isOk = 1;

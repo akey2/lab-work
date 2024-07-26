@@ -17,7 +17,7 @@ function numElems = node_create_subject(nodeSubject, nodeRoot, sSubject, iSubjec
 % This function is part of the Brainstorm software:
 % https://neuroimage.usc.edu/brainstorm
 % 
-% Copyright (c)2000-2020 University of Southern California & McGill University
+% Copyright (c) University of Southern California & McGill University
 % This software is distributed under the terms of the GNU General Public License
 % as published by the Free Software Foundation. Further details on the GPLv3
 % license can be found at http://www.gnu.org/copyleft/gpl.html.
@@ -68,6 +68,7 @@ else
     % Create list of anat files (put the default at the top)
     iAnatList = 1:length(sSubject.Anatomy);
     iAtlas = find(~cellfun(@(c)(isempty(strfind(char(c), '_volatlas')) && isempty(strfind(char(c), '_tissues'))), {sSubject.Anatomy.FileName}));
+    iCt    = find(cellfun(@(c)(~isempty(strfind(char(c), '_volct'))), {sSubject.Anatomy.FileName}));
     if (length(sSubject.Anatomy) > 1)
         iAnatList = [sSubject.iAnatomy, setdiff(iAnatList,[iAtlas,sSubject.iAnatomy]), setdiff(iAtlas,sSubject.iAnatomy)];
     end
@@ -75,6 +76,8 @@ else
     for iAnatomy = iAnatList
         if ismember(iAnatomy, iAtlas)
             nodeType = 'volatlas';
+        elseif ismember(iAnatomy, iCt)
+            nodeType = 'volct';
         else
             nodeType = 'anatomy';
         end

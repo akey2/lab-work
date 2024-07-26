@@ -23,7 +23,7 @@ function [hFig, iDS, iFig] = view_surface_data(SurfaceFile, OverlayFile, Modalit
 % This function is part of the Brainstorm software:
 % https://neuroimage.usc.edu/brainstorm
 % 
-% Copyright (c)2000-2020 University of Southern California & McGill University
+% Copyright (c) University of Southern California & McGill University
 % This software is distributed under the terms of the GNU General Public License
 % as published by the Free Software Foundation. Further details on the GPLv3
 % license can be found at http://www.gnu.org/copyleft/gpl.html.
@@ -159,15 +159,12 @@ switch (DataType)
         end
         OverlayType = 'Source';
     case {'timefreq', 'ptimefreq'}
-        % Force loading associated sources if displaying on the MRI
-        isLoadResults = strcmpi(SurfaceType, 'Anatomy') || ~isempty(strfind(OverlayFile, '_KERNEL_'));
-        % Load timefreq file
-        [iDS, iTimefreq, iResult] = bst_memory('LoadTimefreqFile', OverlayFile, 1, isLoadResults);
+        % Load timefreq file with associated sources
+        [iDS, iTimefreq, iResult] = bst_memory('LoadTimefreqFile', OverlayFile, 1, 1);
         OverlayType = 'Timefreq';
-end
-% If no DataSet is accessible : error
-if isempty(iDS)
-    error(['Cannot load file: "', OverlayFile, '"']);
+    case 'headmodel'
+        OverlayType = 'HeadModel';
+        iDS = bst_memory('GetDataSetSubject', sSubject.FileName, 1);
 end
 
 

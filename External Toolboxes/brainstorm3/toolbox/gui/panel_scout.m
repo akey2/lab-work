@@ -32,6 +32,7 @@ function varargout = panel_scout(varargin)
 %                       panel_scout('RemoveScouts', iScouts) : remove a list of scouts
 %                       panel_scout('RemoveScouts', )        : remove the scouts selected in the JList 
 %                       panel_scout('JoinScouts')
+%                       panel_scout('DifferenceScouts')
 %                       panel_scout('UpdateScoutsVertices', SurfaceFile)
 %                       panel_scout('SaveScouts')
 %                       panel_scout('LoadScouts')
@@ -43,7 +44,7 @@ function varargout = panel_scout(varargin)
 % This function is part of the Brainstorm software:
 % https://neuroimage.usc.edu/brainstorm
 % 
-% Copyright (c)2000-2020 University of Southern California & McGill University
+% Copyright (c) University of Southern California & McGill University
 % This software is distributed under the terms of the GNU General Public License
 % as published by the Free Software Foundation. Further details on the GPLv3
 % license can be found at http://www.gnu.org/copyleft/gpl.html.
@@ -57,7 +58,7 @@ function varargout = panel_scout(varargin)
 % For more information type "brainstorm license" at command prompt.
 % =============================================================================@
 %
-% Authors: Francois Tadel, 2008-2020
+% Authors: Francois Tadel, 2008-2023
 
 eval(macro_method);
 end
@@ -200,6 +201,10 @@ function bstPanelNew = CreatePanel() %#ok<DEFNU>
                 jRadioAbsolute = gui_component('Radio', jPanelDisplay, 'tab', 'Absolute', {Insets(0,0,0,0), jButtonGroup});
                 jRadioRelative = gui_component('Radio', jPanelDisplay, 'tab', 'Relative', {Insets(0,0,0,0), jButtonGroup});
                 jRadioAbsolute.setSelected(1);
+                % Uniform amplitude scales
+                gui_component('Label', jPanelDisplay, 'br', ['Uniform amplitude scale:' strSpace]);
+                jCheckUniformAmplitude  = gui_component('CheckBox', jPanelDisplay, '', '',  Insets(0,0,0,0), [], @UniformTimeSeries_Callback);
+
             jPanelBottom.add('br hfill', jPanelDisplay);
             
         jPanelMain.add(jPanelBottom, BorderLayout.SOUTH)
@@ -234,6 +239,7 @@ function bstPanelNew = CreatePanel() %#ok<DEFNU>
                                   'jCheckRegionColor',        jCheckRegionColor, ...
                                   'jCheckOverlayScouts',      jCheckOverlayScouts, ...
                                   'jCheckOverlayConditions',  jCheckOverlayConditions, ...
+                                  'jCheckUniformAmplitude',   jCheckUniformAmplitude, ...
                                   'jListScouts',                jListScouts));
                               
     
@@ -337,6 +343,16 @@ function bstPanelNew = CreatePanel() %#ok<DEFNU>
 end
                    
 
+%% ===== OPTIONS: UNIFORMIZE SCALES =====
+function UniformTimeSeries_Callback(hObj, ev)
+    % Get button
+    jCheck = ev.getSource();
+    isSel = jCheck.isSelected();
+    figure_timeseries('UniformizeTimeSeriesScales', isSel);
+    jCheck.setSelected(isSel);
+end
+
+
 
 %% =================================================================================
 %  === EXTERNAL PANEL CALLBACKS  ===================================================
@@ -401,7 +417,7 @@ function UpdateMenus(sAtlas, sSurf)
         gui_component('MenuItem', jMenuNew, [], 'Volume scouts', IconLoader.ICON_CHANNEL, [], @(h,ev)bst_call(@CreateAtlasVolumeGrid));
     % Create atlas from volumes in subject anatomy
     jMenuAnat = gui_component('Menu', jMenu, [], 'From subject anatomy', IconLoader.ICON_VOLATLAS, [], []);
-    if ~isempty(sSurf) && ~strcmpi(sSurf.Name, 'FEM') && ~isempty(sSurf.FileName) && (sSurf.FileName(1) ~= '#')
+    if ~isempty(sSurf) && ~strcmpi(sSurf.Name, 'FEM') && ~isempty(sSurf.FileName) && (sSurf.FileName(1) ~= '#') && ~any(sSurf.FileName == '|')
         sSubject = bst_get('SurfaceFile', sSurf.FileName);
         if ~isempty(sSubject.Anatomy)
             iAnatAtlases = find(~cellfun(@(c)isempty(strfind(c, '_volatlas')), {sSubject.Anatomy.FileName}));
@@ -467,8 +483,11 @@ function UpdateMenus(sAtlas, sSurf)
     gui_component('MenuItem', jMenu, [], 'Rename',       IconLoader.ICON_EDIT,    [], @(h,ev)bst_call(@EditScoutLabel));
     gui_component('MenuItem', jMenu, [], 'Set color',    IconLoader.ICON_COLOR_SELECTION, [], @(h,ev)bst_call(@EditScoutsColor));
     if ~isReadOnly
-        gui_component('MenuItem', jMenu, [], 'Delete',       IconLoader.ICON_DELETE,  [], @(h,ev)bst_call(@RemoveScouts));
-        gui_component('MenuItem', jMenu, [], 'Merge',        IconLoader.ICON_FUSION,  [], @(h,ev)bst_call(@JoinScouts));
+        gui_component('MenuItem', jMenu, [], 'Delete',       IconLoader.ICON_DELETE,     [], @(h,ev)bst_call(@RemoveScouts));
+        gui_component('MenuItem', jMenu, [], 'Merge',        IconLoader.ICON_FUSION,     [], @(h,ev)bst_call(@JoinScouts));
+        gui_component('MenuItem', jMenu, [], 'Duplicate',    IconLoader.ICON_COPY,       [], @(h,ev)bst_call(@DuplicateScouts));
+        gui_component('MenuItem', jMenu, [], 'Difference',   IconLoader.ICON_MINUS,      [], @(h,ev)bst_call(@DifferenceScouts));
+        gui_component('MenuItem', jMenu, [], 'Intersect',    IconLoader.ICON_SCROLL_UP,  [], @(h,ev)bst_call(@IntersectScouts));
         jMenu.addSeparator();
     end
     gui_component('MenuItem', jMenu, [], 'Export to Matlab', IconLoader.ICON_MATLAB_EXPORT, [], @(h,ev)bst_call(@ExportScoutsToMatlab));
@@ -490,6 +509,8 @@ function UpdateMenus(sAtlas, sSurf)
     % === MENU PROJECT ====
     % Offer these projection menus only for Cortex surfaces
     if ~isempty(sAtlas) && ~isempty(jMenuProject) && strcmpi(sSurf.Name, 'Cortex')
+        % Project to contralateral hemisphere
+        gui_component('MenuItem', jMenuProject, [], 'Contralateral hemisphere', IconLoader.ICON_CORTEX, [], @(h,ev)bst_call(@ProjectScoutsContralateral, sSurf.FileName));
         % Get subjectlist
         nSubjects = bst_get('SubjectCount');
         nMenus = 0;
@@ -523,7 +544,8 @@ function UpdateMenus(sAtlas, sSurf)
                 % Project to this cortex surface
                 gui_component('MenuItem', jMenuSubj, [], sAllCortex(iSurf).Comment, IconLoader.ICON_CORTEX, [], @(h,ev)bst_call(@ProjectScouts, sSurf.FileName, sAllCortex(iSurf).FileName));
             end
-        end
+        end        
+        % Add scroller
         if (nMenus > 20)
             darrylbu.util.MenuScroller.setScrollerFor(jMenuProject, 20);
         end
@@ -564,6 +586,7 @@ function CreateMenuFunction(jMenu)
     jMenuNorm = gui_component('RadioMenuItem', jMenu, [], 'Mean(norm)', [], [], @(h,ev)bst_call(@SetScoutFunction,'Mean_norm'));
     jMenuMax  = gui_component('RadioMenuItem', jMenu, [], 'Max',        [], [], @(h,ev)bst_call(@SetScoutFunction,'Max'));
     jMenuPow  = gui_component('RadioMenuItem', jMenu, [], 'Power',      [], [], @(h,ev)bst_call(@SetScoutFunction,'Power'));
+    jMenuRms  = gui_component('RadioMenuItem', jMenu, [], 'RMS',        [], [], @(h,ev)bst_call(@SetScoutFunction,'RMS'));
     jMenuAll  = gui_component('RadioMenuItem', jMenu, [], 'All',        [], [], @(h,ev)bst_call(@SetScoutFunction,'All'));
     % Get the selected functions
     allFun = unique({sScouts.Function});
@@ -578,6 +601,7 @@ function CreateMenuFunction(jMenu)
         case 'Mean_norm', jMenuNorm.setSelected(1);
         case 'Max',       jMenuMax.setSelected(1);
         case 'Power',     jMenuPow.setSelected(1);
+        case 'RMS',       jMenuRms.setSelected(1);
         case 'All',       jMenuAll.setSelected(1);
     end
 end
@@ -815,7 +839,7 @@ function labels = FormatScoutLabel(sScouts, isHtml)
     % Loop on scouts
     for i = 1:length(sScouts)
         % Remove the possible " R" and " L" at the end of the scouts names
-        if (length(labels{i}) > 3) && (strcmp(labels{i}(end-1:end), ' R') || strcmp(labels{i}(end-1:end), ' L'))
+        if (length(labels{i}) >= 3) && (strcmp(labels{i}(end-1:end), ' R') || strcmp(labels{i}(end-1:end), ' L'))
             labels{i} = labels{i}(1:end-2);
         end
         % Label = "RegionCode ScoutName"
@@ -999,9 +1023,18 @@ function isReadOnly = isAtlasReadOnly(sAtlas, isInteractive)
     end
     % If it is an "official" atlas: read-only
     if ismember(lower(sAtlas.Name), {...
-            'brainvisa_tzourio-mazoyer', ... % Old default anatomy
-            'freesurfer_destrieux_15000V', 'freesurfer_desikan-killiany_15000V', 'freesurfer_brodmann_15000V', ... % Old default anatomy
-            'destrieux', 'desikan-killiany', 'brodmann', 'brodmann-thresh', 'dkt40', 'dkt', 'mindboggle', 'structures'})  % New freesurf
+            ... % Old default anatomy
+            'brainvisa_tzourio-mazoyer', ...
+            ... % Old default anatomy
+            'freesurfer_destrieux_15000V', 'freesurfer_desikan-killiany_15000V', 'freesurfer_brodmann_15000V', ...
+            ... % New default anatomy (2023b)
+            ... % https://neuroimage.usc.edu/brainstorm/Tutorials/DefaultAnatomy#FreeSurfer_templates
+            'destrieux', 'desikan-killiany', 'brodmann', 'brodmann-thresh', 'dkt40', 'dkt', 'mindboggle', 'vcatlas', 'structures', ... % FreeSurfer
+            'brainnetome', 'hcp_mmp1', 'oasis cortical hubs', ...                                         % Brainnetome, HCP-MMP1.0, OASIS
+            'pals-b12 brodmann', 'pals-b12 lobes', 'pals-b12 orbito-frontal', 'pals-b12 visuotopic', ...  % PALS-B12
+            'schaefer_100_17net', 'schaefer_200_17net', 'schaefer_400_17net', 'schaefer_600_17net',...    % Schaefer2018 17 networks
+            'schaefer_100_7net', ' schaefer_200_7net',  'schaefer_400_7net',  'schaefer_600_7net',...     % Schaefer2018  7 networks
+            })
         if isInteractive
             java_dialog('warning', [...
                 'This atlas is a reference and cannot be modified or deleted.' 10 10 ...
@@ -1150,8 +1183,9 @@ function iScouts = SetScouts(SurfaceFile, iScouts, sScouts)
     end
     % Save the previous scouts configuration
     sScoutsOld = GlobalData.Surface(iSurf).Atlas(sSurf.iAtlas).Scouts;
-    % Detect region if not defined yet (only for new scouts)
-    if isAdd
+    isVolumeAtlas = ParseVolumeAtlas(GlobalData.Surface(iSurf).Atlas(sSurf.iAtlas).Name);
+    % Detect region if not defined yet (only for new surface scouts)
+    if isAdd && ~isVolumeAtlas
         for i = 1:length(sScouts)
             if ~isempty(sScouts(i).Seed) && (isempty(sScouts(i).Region) || strcmpi(sScouts(i).Region, 'UU'))
                 sScouts(i) = SetRegionAuto(sSurf, sScouts(i));
@@ -1327,6 +1361,7 @@ function ScoutsOptions = GetScoutsOptions()
             'overlayScouts',      0, ...
             'overlayConditions',  0, ...
             'displayAbsolute',    1, ...
+            'uniformAmplitude',   0, ...
             'showSelection',      'all', ...
             'patchAlpha',         .7, ...
             'displayContour',     1, ...
@@ -1339,6 +1374,8 @@ function ScoutsOptions = GetScoutsOptions()
     ScoutsOptions.overlayConditions = ctrl.jCheckOverlayConditions.isSelected();
     % Absolute values
     ScoutsOptions.displayAbsolute = ctrl.jRadioAbsolute.isSelected();
+    % Uniform amplitude scale
+    ScoutsOptions.uniformAmplitude = ctrl.jCheckUniformAmplitude.isSelected();
     % Show selection
     if ~ctrl.jRadioShowSel.isSelected() && ~ctrl.jRadioShowAll.isSelected()
         ScoutsOptions.showSelection = 'none';
@@ -1886,8 +1923,10 @@ function iAtlas = SetAtlas(SurfaceFile, iAtlasIn, sAtlas)
     end
     % Fix the structure of the file
     sAtlas = FixAtlasStruct(sAtlas);
+    % Is it a volume atlas
+    isVolumeAtlas = ParseVolumeAtlas(sAtlas.Name);
     % Set default region based on Desikan-Killiany atlas
-    if ~isempty(sAtlas.Scouts) && any(ismember({sAtlas.Scouts.Region}, {'UU','LU','RU','CU'})) && ~strcmpi(sAtlas.Name, 'Desikan-Killiany') && ~isempty(GlobalData.Surface(iSurf).Atlas)
+    if ~isVolumeAtlas && ~isempty(sAtlas.Scouts) && any(ismember({sAtlas.Scouts.Region}, {'UU','LU','RU','CU'})) && ~strcmpi(sAtlas.Name, 'Desikan-Killiany') && ~isempty(GlobalData.Surface(iSurf).Atlas)
         iDK = find(strcmpi({GlobalData.Surface(iSurf).Atlas.Name}, 'Desikan-Killiany'));
         if ~isempty(iDK)
             sAtlas.Scouts = SetDefaultRegions(sAtlas.Scouts, GlobalData.Surface(iSurf).Atlas(iDK(1)).Scouts);
@@ -2688,7 +2727,10 @@ function SaveModifications()
             end
         end
         % Save file
-        bst_save(file_fullpath(GlobalData.Surface(iSurf).FileName), s, 'v7', 1);
+        SurfaceFile = file_fullpath(GlobalData.Surface(iSurf).FileName);
+        if ~isempty(SurfaceFile) && file_exist(SurfaceFile)
+            bst_save(SurfaceFile, s, 'v7', 1);
+        end
         % Reset the modified state
         GlobalData.Surface(iSurf).isAtlasModified = 0;
     end
@@ -3588,6 +3630,70 @@ function EditScoutsColor(newColor)
     UpdateScoutsList();
 end
 
+%% ===== DIFFEERENCE SCOUTS =====
+% Difference of two scouts A,B: keep the vertices in A that are not in B
+function DifferenceScouts(varargin)
+    % Prevent edition of read-only atlas
+    if isAtlasReadOnly()
+        return;
+    end
+    % Stop scout edition
+    SetSelectionState(0);
+    % Get selected scouts
+    [sScouts, iScouts] = GetSelectedScouts();
+    % Need TWO scouts
+    if (length(sScouts) ~= 2)
+        bst_error('You need to select two scouts.', 'Scouts difference', 0);
+        return;
+    % If no overlap: error
+    elseif isempty(intersect(sScouts(1).Vertices, sScouts(2).Vertices))
+        bst_error('The two scouts are not overlapping.', 'Scouts difference', 0);
+        return;
+    % If equal: error
+    elseif isequal(sort(sScouts(1).Vertices), sort(sScouts(2).Vertices))
+        bst_error('The two scouts are identical.', 'Scouts difference', 0);
+        return;
+    end
+    % Check for obvious difference
+    if isempty(setdiff(sScouts(1).Vertices, sScouts(2).Vertices))
+        order = 'B-A';
+    elseif isempty(setdiff(sScouts(2).Vertices, sScouts(1).Vertices))
+        order = 'A-B';
+    else
+        order = [];
+    end
+    % Ask direction of the difference
+    if isempty(order)
+        order = java_dialog('question', ['Scout A: ' sScouts(1).Label 10, 'Scout B: ' sScouts(2).Label 10 'Compute A-B or B-A?'], 'Scouts difference', [], {'A-B', 'B-A'});
+        if isempty(order)
+            return;
+        end
+    end
+    % Create new scout
+    sNewScout = db_template('Scout');
+    switch order
+        case 'A-B'
+            sNewScout.Vertices = setdiff(sScouts(1).Vertices, sScouts(2).Vertices);
+            sNewScout.Label = [sScouts(1).Label ' - ' sScouts(2).Label];
+            sNewScout.Seed = sScouts(1).Seed;
+        case 'B-A'
+            sNewScout.Vertices = setdiff(sScouts(2).Vertices,sScouts(1).Vertices );
+            sNewScout.Label = [sScouts(2).Label ' - ' sScouts(1).Label];
+            sNewScout.Seed = sScouts(2).Seed;
+    end
+    % Redefine seed if it was removed
+    if ~ismember(sNewScout.Seed, sNewScout.Vertices)
+        sNewScout.Seed = sNewScout.Vertices(1);
+    end
+    % Save new scout
+    iNewScout = SetScouts([], 'Add', sNewScout);
+    % Display new scout
+    PlotScouts(iNewScout);
+    % Update "Scouts Manager" panel
+    UpdateScoutsList();   
+    % Select last scout in list (new scout)
+    SetSelectedScouts(iNewScout);
+end
 
 %% ===== JOIN SCOUTS =====
 % Join the scouts selected in the JList 
@@ -3626,11 +3732,87 @@ function JoinScouts(varargin)
     % Display new scout
     PlotScouts(iNewScout);
     % Update "Scouts Manager" panel
-    UpdateScoutsList();   
+    UpdateScoutsList();
     % Select last scout in list (new scout)
     SetSelectedScouts(iNewScout);
 end
 
+
+%% ===== INTERSECT SCOUTS =====
+% Intersection between scouts selected in the JList
+function IntersectScouts(varargin)
+    % Prevent edition of read-only atlas
+    if isAtlasReadOnly()
+        return;
+    end
+    % Stop scout edition
+    SetSelectionState(0);
+    % Get selected scouts
+    [sScouts, iScouts] = GetSelectedScouts();
+    % Need at least TWO scouts
+    if (length(sScouts) < 2)
+        java_dialog('warning', 'You need to select at least two scouts.', 'Join selected scouts');
+        return;
+    end
+    % === Intersect scouts ===
+    % Create new scout
+    sNewScout = db_template('Scout');
+    % Initialize vertices
+    sNewScout.Vertices = sScouts(1).Vertices;
+    for i = 2:length(sScouts)
+        sNewScout.Vertices =  intersect(sNewScout.Vertices, sScouts(i).Vertices);
+    end
+    if isempty(sNewScout.Vertices)
+        java_dialog('msgbox', 'Intersection is empty.', 'Intersect selected scouts');
+        return;
+    end
+    % Copy unmodified fields
+    sNewScout.Seed = sNewScout.Vertices(1);
+    % Label : "Label1 ^ Label2 ^ ..."
+    sNewScout.Label = sScouts(1).Label;
+    for i = 2:length(sScouts)
+        sNewScout.Label = [sNewScout.Label ' n ' sScouts(i).Label];
+    end
+    % Save new scout
+    iNewScout = SetScouts([], 'Add', sNewScout);
+    % Display new scout
+    PlotScouts(iNewScout);
+    % Update "Scouts Manager" panel
+    UpdateScoutsList();
+    % Select last scout in list (new scout)
+    SetSelectedScouts(iNewScout);
+end
+
+%% ===== DUPLICATE SCOUTS =====
+% Duplicate scouts selected in the JList
+function DuplicateScouts(varargin)
+    % Prevent edition of read-only atlas
+    if isAtlasReadOnly()
+        return;
+    end
+    % Stop scout edition
+    SetSelectionState(0);
+    % Get selected scouts
+    sScouts = GetSelectedScouts();
+    % New scout template
+    sNewScout = db_template('scout');
+
+    % === Copy scouts ===
+    sNewScouts = sScouts;
+    % Update new scouts name and reset handles
+    for i = 1:length(sNewScouts)
+        sNewScouts(i).Label = [sScouts(i).Label '_copy'];
+        sNewScouts(i).Handles = sNewScout.Handles;
+    end
+    % Save new scouts
+    iNewScouts = SetScouts([], 'Add', sNewScouts);
+    % Display new scouts
+    PlotScouts(iNewScouts);
+    % Update "Scouts Manager" panel
+    UpdateScoutsList();
+    % Select new scouts in list
+    SetSelectedScouts(iNewScouts);
+end
 
 %% ===============================================================================
 %  ====== OTHER SCOUTS OPERATIONS ================================================
@@ -3931,10 +4113,10 @@ function ImportScoutsFromMatlab()
 end
 
 
-%% ===== PROJECT SCOUTS =====
+%% ===== PROJECT SCOUTS BETWEEN SURFACES =====
 function ProjectScouts(srcSurfFile, destSurfFile)
     % Get current atlas
-    [sAtlas, iAtlas, sSurf, iSurf] = GetAtlas();
+    sAtlas = GetAtlas();
     % Get selected scouts
     sScouts = GetSelectedScouts();
     if isempty(sAtlas) || isempty(sScouts)
@@ -3944,7 +4126,7 @@ function ProjectScouts(srcSurfFile, destSurfFile)
     % Use only the selected scouts
     sAtlas.Scouts = sScouts;
     % Progress bar
-    bst_progress('start', 'Project sources', 'Computing interpolation...');
+    bst_progress('start', 'Project scouts', 'Computing interpolation...');
     % Call function to project scouts
     nScoutProj = bst_project_scouts(srcSurfFile, destSurfFile, sAtlas);
     % Unload destination surface
@@ -3953,6 +4135,76 @@ function ProjectScouts(srcSurfFile, destSurfFile)
     bst_progress('stop');
     % Message
     java_dialog('msgbox', sprintf('Projected %d scouts to:\n%s', nScoutProj, destSurfFile));
+end
+
+
+%% ===== PROJECT SCOUTS BETWEEN HEMIPSHERES =====
+function ProjectScoutsContralateral(srcSurfFile)
+
+    % Save any modification to the surface
+    SaveModifications();
+
+    % Get current atlas
+    [sAtlas, iAtlas, sSurf] = GetAtlas();
+    isVolumeAtlas = ParseVolumeAtlas(sAtlas.Name);
+    % Volume atlas: Get anatomy surface and grid of points
+    if isVolumeAtlas
+        % Get current figure
+        hFig = bst_figures('GetCurrentFigure', '3D');
+        if isempty(hFig) || ~ishandle(hFig)
+            return
+        end
+        % Get figure Anatomy surface
+        sMri = panel_surface('GetSurfaceMri', hFig);
+        % Get figure GridLoc
+        GridLoc = GetFigureGrid(hFig);
+        % Warning when using linear MNI registration
+        if ~isfield(sMri, 'NCS') || ~isfield(sMri.NCS, 'y') || isempty(sMri.NCS.y)
+            % Error when no MNI registration at all
+            if ~isfield(sMri, 'NCS') || ~isfield(sMri.NCS, 'R') || isempty(sMri.NCS.R)
+                bst_error('Compute MNI registration first.', 'Project volume scouts', 0);
+                return;
+            else
+                isConfirm = java_dialog('confirm', ['To project volume scouts, it is advised to compute a nonlinear MNI normalization first.' 10 10 'Proceed with linear MNI registration anyway?' 10 10], 'Project volume scouts');
+                if ~isConfirm
+                    return;
+                end
+            end
+        end
+    else
+        sMri = [];
+        GridLoc = [];
+    end
+    % Get selected scouts
+    sScouts = GetSelectedScouts();
+    if isempty(sAtlas) || isempty(sScouts)
+        bst_error('No scouts selected.', 'Project scouts', 0);
+        return;
+    end
+    % Use only the selected scouts
+    sAtlas.Scouts = sScouts;
+    % Progress bar
+    bst_progress('start', 'Project scouts', 'Computing interpolation...');
+    % Call function to project scouts
+    sAtlas = bst_project_scouts_contra(srcSurfFile, sAtlas, sMri, GridLoc);
+    if isempty(sAtlas.Scouts)
+        return;
+    end
+    
+    % Set handles structure
+    sTemplate = db_template('scout');
+    [sAtlas.Scouts.Handles] = deal(sTemplate.Handles);
+    % Save new scout
+    iNewScouts = SetScouts([], 'Add', sAtlas.Scouts);
+    % Display new scout
+    PlotScouts(iNewScouts);
+    % Update "Scouts Manager" panel
+    UpdateScoutsList();
+    % Select last scout in list (new scout)
+    SetSelectedScouts(iNewScouts);
+
+    % Close progress bar
+    bst_progress('stop');
 end
 
 
@@ -5152,22 +5404,99 @@ function SaveScouts(varargin)
         ScoutFile = bst_fullfile(LastUsedDirs.ExportAnat, ['scout_', file_standardize(sAtlas.Name), sprintf('_%d.mat', length(sAtlas.Scouts))]);
     end
     % Get filename where to store the filename
-    ScoutFile = java_getfile('save', 'Save selected scouts', ScoutFile, ... 
+    [ScoutFile, FileFormat] = java_getfile('save', 'Save selected scouts', ScoutFile, ... 
                              'single', 'files', ...
-                             {{'_scout'}, 'Brainstorm cortical scouts (*scout*.mat)', 'BST'}, 1);
+                             {{'_scout'}, 'Brainstorm cortical scouts (*scout*.mat)', 'BST'; ...
+                              {'.label'}, 'FreeSurfer ROI, single scout (*.label)', 'FS-LABEL-SINGLE'; ...
+                              {'.annot'}, 'FreeSurfer annotation, multiple scouts (*.annot)', 'FS-ANNOT'}, 1);
     if isempty(ScoutFile)
         return;
     end
     % Save last used folder
     LastUsedDirs.ExportAnat = bst_fileparts(ScoutFile);
     bst_set('LastUsedDirs',  LastUsedDirs);
-    % Make sure that filename contains the 'scout' tag
-    if isempty(strfind(ScoutFile, '_scout')) && isempty(strfind(ScoutFile, 'scout_'))
-        [filePath, fileBase, fileExt] = bst_fileparts(ScoutFile);
-        ScoutFile = bst_fullfile(filePath, ['scout_' fileBase fileExt]);
+    % Switch file format
+    switch (FileFormat)
+        case 'BST'
+            % Make sure that filename contains the 'scout' tag
+            if isempty(strfind(ScoutFile, '_scout')) && isempty(strfind(ScoutFile, 'scout_'))
+                [filePath, fileBase, fileExt] = bst_fileparts(ScoutFile);
+                ScoutFile = bst_fullfile(filePath, ['scout_' fileBase fileExt]);
+            end
+            % Save file
+            bst_save(ScoutFile, sAtlas, 'v7');
+        case 'FS-LABEL-SINGLE'
+            if length(sScouts) == 1
+                out_label_fs(ScoutFile, sScouts.Label, sScouts.Vertices - 1, sSurf.Vertices(sScouts.Vertices,:), ones(1, length(sScouts.Vertices)));
+            else
+                bst_error('FreeSurfer label file can only store a single scout. Please export each scout separatly');
+                return;
+            end
+        case 'FS-ANNOT'
+            vertices = [];
+            label = [];
+            ct = struct();
+            ct.numEntries   = length(sScouts);
+            ct.orig_tab     = sAtlas.Name;
+            ct.struct_names = {sScouts.Label};
+            ct.table = zeros(length(sScouts),5);
+
+            % Address duplicate colors
+            sScouts = arrayfun(@(s) setfield(s,'Color', round(255*s.Color)), sScouts);  % Scale colors to 0-255
+            [C,ia,ic] = unique(cat(1, sScouts.Color), 'rows');                          % Unique colors
+            if length(C) ~= length(sScouts)
+                % Space to search neightbors, includes [0, 0, 0]
+                [~, nMostRep] = mode(ic);
+                sideCube  = ceil(nMostRep^(1/3)) - 1;
+                [R, G, B] = meshgrid(-sideCube:sideCube, -sideCube:sideCube, -sideCube:sideCube);
+                seachRGB= [R(:), G(:), B(:)];
+                for iia = 1 : length(ia)
+                    rep = find(ic == ic(ia(iia)));
+                    % If duplicate colors, get neighboring colors
+                    if length(rep) > 1
+                        colorNeighbors = bst_bsxfun(@plus, seachRGB, sScouts(rep(1)).Color);
+                        colorNeighbors(any(colorNeighbors > 255, 2) | any(colorNeighbors < 0, 2) , :) = [];
+                        [~, iClosest] = sort(sum((bsxfun(@minus, colorNeighbors, sScouts(rep(1)).Color) .^2), 2));
+                        colorNeighbors = colorNeighbors(iClosest(1: length(rep)), :);
+                        for irep = 1 : length(rep)
+                            sScouts(rep(irep)).Color = colorNeighbors(irep, :);
+                        end
+                    end
+                end
+            end
+            % Check again for unique colors, if duplicate colors get random RGB
+            [C,ia,ic] = unique(cat(1, sScouts.Color), 'rows');
+            if length(C) ~= length(sScouts)
+                % Find indexes of duplicate colors
+                repIxs = [];
+                for iia = 1 : length(ia)
+                    rep = find(ic == ic(ia(iia)));
+                    if length(rep) > 1
+                        repIxs = [repIxs, rep(2:end)];
+                    end
+                end
+                % Get a unique random color for each duplicate color
+                colorsRnd = [];
+                while size(colorsRnd, 1) < length(repIxs)
+                     colorRnd = randi(256, 1, 3) - 1;
+                     if ~ismember(colorRnd, C)
+                         C = [C; colorRnd];
+                         colorsRnd = [colorsRnd; colorRnd];
+                     end
+                end
+                for ix = 1 : length(repIxs)
+                    sScouts(repIxs(ix)).Color = colorsRnd(ix, :);
+                end
+            end
+
+            for iScout = 1:length(sScouts)
+                ct.table(iScout,1:3) = sScouts(iScout).Color;
+                ct.table(iScout,5)   = ct.table(iScout,1)  + ct.table(iScout,2) *2^8 + ct.table(iScout,3) *2^16;
+                vertices = [vertices , sScouts(iScout).Vertices - 1];
+                label    = [label ,  repmat(ct.table(iScout,5), 1, length(sScouts(iScout).Vertices))];
+            end
+            write_annotation(ScoutFile, vertices, label, ct)
     end
-    % Save file
-    bst_save(ScoutFile, sAtlas, 'v7');
 end
 
 
@@ -5305,6 +5634,22 @@ function [GridLoc, HeadModelType, GridAtlas] = GetFigureGrid(hFig)
         if ~isempty(HeadModelMat.GridLoc) && ~strcmpi(HeadModelType, 'surface')
             GridLoc = HeadModelMat.GridLoc;
             GridAtlas = HeadModelMat.GridAtlas;
+        end
+    end
+    % Get timefreq file displayed in the figure
+    Timefreq = getappdata(hFig, 'Timefreq');
+    if ~isempty(Timefreq)
+        % Get loaded time-freq structure
+        [iDS, iTimefreq] = bst_memory('LoadTimefreqFile', Timefreq.FileName);
+        % Get results file
+        if strcmpi(GlobalData.DataSet(iDS).Timefreq(iTimefreq).DataType, 'results') && ~isempty(GlobalData.DataSet(iDS).Timefreq(iTimefreq).DataFile)
+            iResult = bst_memory('GetResultInDataSet', iDS, GlobalData.DataSet(iDS).Timefreq(iTimefreq).DataFile);
+            HeadModelType = GlobalData.DataSet(iDS).Results(iResult).HeadModelType;
+            % Get volume grids
+            if ~isempty(GlobalData.DataSet(iDS).Timefreq(iTimefreq).GridLoc) && ~strcmpi(HeadModelType, 'surface')
+                GridLoc   = GlobalData.DataSet(iDS).Timefreq(iTimefreq).GridLoc;
+                GridAtlas = GlobalData.DataSet(iDS).Timefreq(iTimefreq).GridAtlas;
+            end
         end
     end
 end

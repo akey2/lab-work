@@ -7,7 +7,7 @@ function varargout = process_corr2( varargin )
 % This function is part of the Brainstorm software:
 % https://neuroimage.usc.edu/brainstorm
 % 
-% Copyright (c)2000-2020 University of Southern California & McGill University
+% Copyright (c) University of Southern California & McGill University
 % This software is distributed under the terms of the GNU General Public License
 % as published by the Free Software Foundation. Further details on the GPLv3
 % license can be found at http://www.gnu.org/copyleft/gpl.html.
@@ -22,6 +22,7 @@ function varargout = process_corr2( varargin )
 % =============================================================================@
 %
 % Authors: Francois Tadel, 2012-2020
+%          Raymundo Cassani, 2023
 
 eval(macro_method);
 end
@@ -44,14 +45,31 @@ function sProcess = GetDescription() %#ok<DEFNU>
     
     % === CONNECT INPUT
     sProcess = process_corr2('DefineConnectOptions', sProcess);
+    % === TIME RESOLUTION
+    sProcess.options.timeres.Comment = {'Windowed', 'None', '<B>Time resolution:</B>'; ...
+                                        'windowed', 'none', ''};
+    sProcess.options.timeres.Type    = 'radio_linelabel';
+    sProcess.options.timeres.Value   = 'none';
+    sProcess.options.timeres.Controller = struct('windowed', 'windowed', 'none', 'nowindowed');
+    % === WINDOW LENGTH
+    sProcess.options.avgwinlength.Comment = '&nbsp;&nbsp;&nbsp;Time window length:';
+    sProcess.options.avgwinlength.Type    = 'value';
+    sProcess.options.avgwinlength.Value   = {1, 's', []};
+    sProcess.options.avgwinlength.Class   = 'windowed';
+    % === WINDOW OVERLAP
+    sProcess.options.avgwinoverlap.Comment = '&nbsp;&nbsp;&nbsp;Time window overlap:';
+    sProcess.options.avgwinoverlap.Type    = 'value';
+    sProcess.options.avgwinoverlap.Value   = {50, '%', []};
+    sProcess.options.avgwinoverlap.Class   = 'windowed';
     % === SCALAR PRODUCT
     sProcess.options.scalarprod.Comment = 'Compute scalar product instead of correlation<BR>(do not remove average of the signal)';
     sProcess.options.scalarprod.Type    = 'checkbox';
     sProcess.options.scalarprod.Value   = 0;
     % === OUTPUT MODE
-    sProcess.options.outputmode.Comment = {'Save individual results (one file per input file)', 'Save average connectivity matrix (one file)'};
-    sProcess.options.outputmode.Type    = 'radio';
-    sProcess.options.outputmode.Value   = 1;
+    sProcess.options.outputmode.Comment = {'separately for each file', 'average over files/epochs', 'Estimate & save:'; ...
+                                            'input', 'avg', ''};
+    sProcess.options.outputmode.Type    = 'radio_linelabel';
+    sProcess.options.outputmode.Value   = 'input';
     sProcess.options.outputmode.Group   = 'output';
 end
 
@@ -70,16 +88,21 @@ function OutputFiles = Run(sProcess, sInputA, sInputB) %#ok<DEFNU>
         OutputFiles = {};
         return
     end
-    
+
     % Metric options
     OPTIONS.Method     = 'corr';
     OPTIONS.pThresh    = 0.05;
     OPTIONS.RemoveMean = ~sProcess.options.scalarprod.Value;
+    if strcmpi(sProcess.options.timeres.Value, 'windowed')
+        OPTIONS.WinLen = sProcess.options.avgwinlength.Value{1};
+        OPTIONS.WinOverlap = sProcess.options.avgwinoverlap.Value{1}/100;
+    end
+    % Time-resolved; now option, no longer separate process
+    OPTIONS.TimeRes = sProcess.options.timeres.Value;
     
     % Compute metric
-    OutputFiles = bst_connectivity({sInputA.FileName}, {sInputB.FileName}, OPTIONS);
+    OutputFiles = bst_connectivity(sInputA, sInputB, OPTIONS);
 end
-
 
 
 %% =================================================================================================
@@ -100,7 +123,7 @@ function sProcess = DefineConnectOptions(sProcess) %#ok<DEFNU>
     sProcess.options.src_channel.InputTypes = {'data'};
     sProcess.options.src_channel.Group      = 'input';
     % === FROM: ROW NAME ===
-    sProcess.options.src_rowname.Comment     = 'Row name or index (A): ';
+    sProcess.options.src_rowname.Comment     = 'Signal names or indices (A): ';
     sProcess.options.src_rowname.Type        = 'text';
     sProcess.options.src_rowname.Value       = '';
     sProcess.options.src_rowname.InputTypes  = {'timefreq', 'matrix'};
@@ -117,20 +140,46 @@ function sProcess = DefineConnectOptions(sProcess) %#ok<DEFNU>
     sProcess.options.dest_scouts.Value       = {};
     sProcess.options.dest_scouts.InputTypesB = {'results'};
     sProcess.options.dest_scouts.Group       = 'input';
-    % === SCOUT FUNCTION ===
-    sProcess.options.scoutfunc.Comment     = {'Mean', 'Max', 'PCA', 'Std', 'All', 'Scout function:'};
-    sProcess.options.scoutfunc.Type        = 'radio_line';
-    sProcess.options.scoutfunc.Value       = 1;
-    sProcess.options.scoutfunc.InputTypes  = {'results'};
-    sProcess.options.scoutfunc.InputTypesB = {'results'};
-    sProcess.options.scoutfunc.Group       = 'input';
+    % === UNCONSTRAINED SOURCES ===
+    sProcess.options.flatten.Comment     = 'Flatten unconstrained source orientations with PCA first';
+    sProcess.options.flatten.Type        = 'checkbox';
+    sProcess.options.flatten.Value       = 0;
+    sProcess.options.flatten.InputTypes  = {'results'};
+    sProcess.options.flatten.InputTypesB = {'results'};
+    sProcess.options.flatten.Group       = 'input';
     % === SCOUT TIME ===
-    sProcess.options.scouttime.Comment     = {'Before', 'After', 'When to apply the scout function:'};
-    sProcess.options.scouttime.Type        = 'radio_line';
-    sProcess.options.scouttime.Value       = 2;
-    sProcess.options.scouttime.InputTypes  = {'results'};
-    sProcess.options.scouttime.InputTypesB = {'results'};
-    sProcess.options.scouttime.Group       = 'input';
+    sProcess.options.scouttime.Comment       = {'before&nbsp;&nbsp;&nbsp;', 'after&nbsp;&nbsp;&nbsp; connectivity metric', 'Scout function: &nbsp;&nbsp;&nbsp;Apply'; ...
+                                                'before', 'after', ''};
+    sProcess.options.scouttime.Type          = 'radio_linelabel';
+    sProcess.options.scouttime.Value         = 'after';
+    sProcess.options.scouttime.InputTypes    = {'results'};
+    sProcess.options.scouttime.InputTypesB   = {'results'};
+    sProcess.options.scouttime.Group         = 'input';
+    sProcess.options.scouttime.Controller    = struct('before', 'before', 'after', 'after');
+    % === SCOUT FUNCTION ===    
+    sProcess.options.scoutfunc.Comment        = {'PCA&nbsp;&thinsp;&thinsp;', 'Mean&nbsp;', 'All', '&nbsp;&nbsp;&nbsp;'; ...
+                                                'pca', 'mean', 'all', ''};
+    sProcess.options.scoutfunc.Type           = 'radio_linelabel';
+    sProcess.options.scoutfunc.Value          = 'mean';
+    sProcess.options.scoutfunc.InputTypes     = {'results'};
+    sProcess.options.scoutfunc.InputTypesB    = {'results'};
+    sProcess.options.scoutfunc.Group          = 'input';
+    sProcess.options.scoutfunc.Class          = 'before';
+    sProcess.options.scoutfuncaft.Comment     = {'Mean&nbsp;', 'Max&nbsp;&thinsp;&thinsp;', 'Std', '&nbsp;&nbsp;&nbsp;'; ...
+                                                'mean', 'max', 'std', ''};
+    sProcess.options.scoutfuncaft.Type        = 'radio_linelabel';
+    sProcess.options.scoutfuncaft.Value       = 'mean';
+    sProcess.options.scoutfuncaft.InputTypes  = {'results'};
+    sProcess.options.scoutfuncaft.InputTypesB = {'results'};
+    sProcess.options.scoutfuncaft.Group       = 'input';
+    sProcess.options.scoutfuncaft.Class       = 'after';
+    % Options: PCA, for orientations and/or scouts
+    sProcess.options.pcaedit.Comment     = {'panel_pca', ' PCA options: '};
+    sProcess.options.pcaedit.Type        = 'editpref';
+    sProcess.options.pcaedit.Value       = bst_get('PcaOptions'); % function that returns defaults.
+    sProcess.options.pcaedit.InputTypes  = {'results'};
+    sProcess.options.pcaedit.InputTypesB = {'results'};
+    sProcess.options.pcaedit.Group       = 'input';
     % === TO: SENSOR SELECTION ===
     sProcess.options.dest_sensors.Comment     = 'Sensor types or names (B): ';
     sProcess.options.dest_sensors.Type        = 'text';
@@ -144,7 +193,7 @@ function sProcess = DefineConnectOptions(sProcess) %#ok<DEFNU>
     sProcess.options.includebad.InputTypesB = {'data'};
     sProcess.options.includebad.Group       = 'input';
     % === TO: ROW NAME ===
-    sProcess.options.dest_rowname.Comment     = 'Row names or indices (B): ';
+    sProcess.options.dest_rowname.Comment     = 'Signal names or indices (B): ';
     sProcess.options.dest_rowname.Type        = 'text';
     sProcess.options.dest_rowname.Value       = '';
     sProcess.options.dest_rowname.InputTypesB = {'timefreq', 'matrix'};
@@ -152,46 +201,69 @@ function sProcess = DefineConnectOptions(sProcess) %#ok<DEFNU>
 end
 
 
-%% ===== GET SCOUTS OPTIONS =====
+%% ===== GET METRIC OPTIONS =====
 function OPTIONS = GetConnectOptions(sProcess, sInputA, sInputB) %#ok<DEFNU>
     % Default options structure
     OPTIONS = bst_connectivity();
     % Get process name
     OPTIONS.ProcessName = func2str(sProcess.Function);
-    
+
     % === TIME WINDOW ===
     if isfield(sProcess.options, 'timewindow') && isfield(sProcess.options.timewindow, 'Value') && iscell(sProcess.options.timewindow.Value) && ~isempty(sProcess.options.timewindow.Value)
         OPTIONS.TimeWindow = sProcess.options.timewindow.Value{1};
     end
-    
-    % === SCOUT FUNCTION ===
+    % === UNCONSTRAINED SOURCE ORIENTATIONS ===
+    if isfield(sProcess.options, 'flatten') && isfield(sProcess.options.flatten, 'Value') && ~isempty(sProcess.options.flatten.Value)
+        if sProcess.options.flatten.Value
+            OPTIONS.UnconstrFunc = 'pca';
+        else
+            OPTIONS.UnconstrFunc = 'max'; % not used explicitly, but saved in output (if max actually applied)
+        end
+    end
+    % === SCOUTS ===
+    % These scout options are set here even if scouts are NOT selected. To check if scouts are used,
+    % check for nonempty TargetA/B (set below) of type cell or struct.
     if isfield(sProcess.options, 'scoutfunc') && isfield(sProcess.options.scoutfunc, 'Value') && isfield(sProcess.options, 'scouttime') && isfield(sProcess.options.scouttime, 'Value')
         % Override scouts function
         switch (sProcess.options.scoutfunc.Value)
-            case 1, OPTIONS.ScoutFunc = 'mean';
-            case 2, OPTIONS.ScoutFunc = 'max';
-            case 3, OPTIONS.ScoutFunc = 'pca';
-            case 4, OPTIONS.ScoutFunc = 'std';
-            case 5, OPTIONS.ScoutFunc = 'all';
+            case {1, 'mean'}, OPTIONS.ScoutFunc = 'mean';
+            case {2, 'max'},  OPTIONS.ScoutFunc = 'max';
+            case {3, 'pca'},  OPTIONS.ScoutFunc = 'pca';
+            case {4, 'std'},  OPTIONS.ScoutFunc = 'std';
+            case {5, 'all'},  OPTIONS.ScoutFunc = 'all';
+            otherwise 
+                bst_report('Error', sProcess, [], 'Invalid scout function.'); 
+                OPTIONS = [];
+                return;
         end
-        % Scout function order
-        switch (sProcess.options.scouttime.Value)
-            case 1, OPTIONS.ScoutTime = 'before';
-            case 2, OPTIONS.ScoutTime = 'after';
+        % Scout function order 
+        if isfield(sProcess.options, 'scouttime')
+            switch (sProcess.options.scouttime.Value)
+                case {1, 'before'}
+                    OPTIONS.ScoutTime = 'before';
+                    if ismember(OPTIONS.ScoutFunc, {'max', 'std'}) % No longer possible in GUI
+                        bst_report('Error', sProcess, [], 'Scout functions MAX and STD cannot be applied before estimating the connectivity.');
+                        OPTIONS = [];
+                        return;
+                    end
+                case {2, 'after'}
+                    OPTIONS.ScoutTime = 'after';
+                    % 2023 GUI change: get scout function from separate "after" list
+                    if isfield(sProcess.options, 'scoutfuncaft')
+                        OPTIONS.ScoutFunc = sProcess.options.scoutfuncaft.Value;
+                    end
+                    if strcmpi(OPTIONS.ScoutFunc, 'pca') % No longer possible in GUI
+                        bst_report('Error', sProcess, [], 'Scout function PCA cannot be applied after estimating the connectivity.');
+                        OPTIONS = [];
+                        return;
+                    end
+            end
         end
-        % Perform some checks
-        if strcmpi(OPTIONS.ScoutTime, 'before') && ismember(OPTIONS.ScoutFunc, {'max', 'std'})
-            bst_report('Error', sProcess, [], 'Scout functions MAX and STD should not be applied before estimating the connectivity.');
-            OPTIONS = [];
-            return;
-        end
-        if strcmpi(OPTIONS.ScoutTime, 'after') && strcmpi(OPTIONS.ScoutFunc, 'pca')
-            bst_report('Error', sProcess, [], 'Scout function PCA cannot be applied after estimating the connectivity.');
-            OPTIONS = [];
-            return;
+        % Scout PCA options: copy only so they are saved in output files, for documentation; OPTIONS not actually used for PCA computation.
+        if (strcmpi(OPTIONS.UnconstrFunc, 'pca') || strcmpi(OPTIONS.ScoutFunc, 'pca')) && isfield(sProcess.options, 'pcaedit') && isfield(sProcess.options.pcaedit, 'Value') && ~isempty(sProcess.options.pcaedit.Value)
+            OPTIONS.PcaOptions = sProcess.options.pcaedit.Value;
         end
     end
-    
     % === FROM: REFERENCE CHANNELS ===
     if strcmpi(sInputA(1).FileType, 'data') && isfield(sProcess.options, 'src_channel') && isfield(sProcess.options.src_channel, 'Value')
         OPTIONS.TargetA = sProcess.options.src_channel.Value;

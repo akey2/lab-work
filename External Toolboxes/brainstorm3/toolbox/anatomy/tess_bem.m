@@ -23,7 +23,7 @@ function isOk = tess_bem(iSubject, BemOptions, DEBUG)
 % This function is part of the Brainstorm software:
 % https://neuroimage.usc.edu/brainstorm
 % 
-% Copyright (c)2000-2020 University of Southern California & McGill University
+% Copyright (c) University of Southern California & McGill University
 % This software is distributed under the terms of the GNU General Public License
 % as published by the Free Software Foundation. Further details on the GPLv3
 % license can be found at http://www.gnu.org/copyleft/gpl.html.
@@ -61,10 +61,10 @@ if sSubject.UseDefaultAnat
 end
 % Check layers
 if isempty(sSubject.iCortex) || isempty(sSubject.iScalp) || isempty(sSubject.iAnatomy) || isempty(sSubject.Anatomy)
-    bst_error('Computation of BEM layers requires at least: MRI + scalp surface + cortex surface.', 'BEM surfaces', 0);
-    return
+    error('Computation of BEM layers requires at least: MRI + scalp surface + cortex surface.');
 end
 % Progress bar
+isProgress = bst_progress('IsVisible');
 bst_progress('start', 'Create BEM surfaces', 'Initialization...', 0, 100);
 % Get surfaces
 CortexFile = sSubject.Surface(sSubject.iCortex(1)).FileName;
@@ -346,7 +346,9 @@ if DEBUG
 end
 
 % Close, success
-bst_progress('stop');
+if ~isProgress
+    bst_progress('stop');
+end
 isOk = 1;
 
 end

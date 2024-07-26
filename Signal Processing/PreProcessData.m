@@ -22,6 +22,8 @@ if (nargin < 6)
     badchannels = [];
 end
 
+data = double(data);
+
 trans = false;
 if (size(data,1) > size(data,2))
     data = data';

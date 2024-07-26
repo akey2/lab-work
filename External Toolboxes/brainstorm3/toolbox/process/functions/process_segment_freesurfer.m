@@ -9,7 +9,7 @@ function varargout = process_segment_freesurfer( varargin )
 % This function is part of the Brainstorm software:
 % https://neuroimage.usc.edu/brainstorm
 % 
-% Copyright (c)2000-2020 University of Southern California & McGill University
+% Copyright (c) University of Southern California & McGill University
 % This software is distributed under the terms of the GNU General Public License
 % as published by the Free Software Foundation. Further details on the GPLv3
 % license can be found at http://www.gnu.org/copyleft/gpl.html.
@@ -23,7 +23,7 @@ function varargout = process_segment_freesurfer( varargin )
 % For more information type "brainstorm license" at command prompt.
 % =============================================================================@
 %
-% Authors: Francois Tadel, 2021
+% Authors: Francois Tadel, 2021-2023
 
 eval(macro_method);
 end
@@ -141,8 +141,14 @@ function [isOk, errMsg] = Compute(iSubject, iMris, nVertices, isInteractive, par
         return;
     end
     % Process comment
+    isFlair = 0;
     if ~isempty(T2File)
-        strT1T2 = '(T1+T2)';
+        if ~isempty(strfind(lower(sMriT2.Comment),'flair'))
+            isFlair = 1;
+            strT1T2 = '(T1+FLAIR)';
+        else
+            strT1T2 = '(T1+T2)';
+        end
     else
         strT1T2 = '(T1 only)';
     end
@@ -191,7 +197,7 @@ function [isOk, errMsg] = Compute(iSubject, iMris, nVertices, isInteractive, par
 
     % ===== SAVE T1 MRI AS NII =====
     % Get temporary folder
-    TmpDir = bst_get('BrainstormTmpDir');
+    TmpDir = bst_get('BrainstormTmpDir', 0, 'freesurfer');
     % Save MRI in .nii format
     subjid = strrep(sSubject.Name, '@', '');
     T1Nii = bst_fullfile(TmpDir, [subjid, 'T1.nii']);
@@ -222,15 +228,22 @@ function [isOk, errMsg] = Compute(iSubject, iMris, nVertices, isInteractive, par
         if ~isequal(size(sMriT1.Cube), size(sMriT2.Cube)) || ~isequal(size(sMriT1.Voxsize), size(sMriT2.Voxsize))
             errMsg = [errMsg, 'Input images have different dimension, you must register and reslice them first.' 10 ...
                       sprintf('T1:(%d x %d x %d),   T2:(%d x %d x %d)', size(sMriT1.Cube), size(sMriT2.Cube))];
+            % Delete temporary files
+            if ~isempty(TmpDir)
+                file_delete(TmpDir, 1, 1);
+            end
             return;
         end
     else
         T2Nii = [];
     end
-
+    
     % ===== RUN FREESURFER =====
+    % T1+FLAIR
+    if ~isempty(T2File) && isFlair
+        strCall = ['recon-all -all -subject "' subjid '" -i "' T1Nii '" -FLAIR "' T2Nii '" -FLAIRpial ' param];
     % T1+T2
-    if ~isempty(T2File)
+    elseif ~isempty(T2File) 
         strCall = ['recon-all -all -subject "' subjid '" -i "' T1Nii '" -T2 "' T2Nii '" -T2pial ' param];
     % T1 only
     else

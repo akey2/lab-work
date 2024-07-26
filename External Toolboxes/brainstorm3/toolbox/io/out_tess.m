@@ -13,7 +13,7 @@ function out_tess(BstFile, OutputFile, FileFormat, sMri)
 % This function is part of the Brainstorm software:
 % https://neuroimage.usc.edu/brainstorm
 % 
-% Copyright (c)2000-2020 University of Southern California & McGill University
+% Copyright (c) University of Southern California & McGill University
 % This software is distributed under the terms of the GNU General Public License
 % as published by the Free Software Foundation. Further details on the GPLv3
 % license can be found at http://www.gnu.org/copyleft/gpl.html.
@@ -86,7 +86,15 @@ switch upper(FileFormat)
         end
         % Export file
         out_tess_fs(TessMat, OutputFile);
+    case 'OBJ'
+        % Swap faces
+        TessMat.Faces = TessMat.Faces(:,[2 1 3]);
+        out_tess_obj(TessMat, OutputFile);
     case 'OFF'
+        % Vertices: convert to millimeters
+        TessMat.Vertices = TessMat.Vertices .* 1000;
+        % Swap faces
+        TessMat.Faces    = TessMat.Faces(:,[2 1 3]);
         out_tess_off(TessMat, OutputFile);
     case 'TRI'
         out_tess_tri(TessMat, OutputFile);

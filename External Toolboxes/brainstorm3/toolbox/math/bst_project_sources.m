@@ -14,7 +14,7 @@ function OutputFiles = bst_project_sources( ResultsFile, destSurfFile, isAbsolut
 % This function is part of the Brainstorm software:
 % https://neuroimage.usc.edu/brainstorm
 % 
-% Copyright (c)2000-2020 University of Southern California & McGill University
+% Copyright (c) University of Southern California & McGill University
 % This software is distributed under the terms of the GNU General Public License
 % as published by the Free Software Foundation. Further details on the GPLv3
 % license can be found at http://www.gnu.org/copyleft/gpl.html.
@@ -254,8 +254,8 @@ for iGroup = 1:nGroup
         end
         % Remove link with original file
         ResultsMat.DataFile = [];
-        % Check if the file was reprojected on an atlas
-        if isfield(ResultsMat, 'Atlas') && ~isempty(ResultsMat.Atlas)
+        % Check if the file was reprojected on an atlas (only for results files)
+        if isfield(ResultsMat, 'Atlas') && ~isempty(ResultsMat.Atlas) && ~isTimefreq
             wrnMsg = ['Cannot process atlas-based source files: Skipping file "' ResultsFile '"...'];
             if isInteractive
                 disp(wrnMsg);
