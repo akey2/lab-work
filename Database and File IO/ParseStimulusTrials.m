@@ -1,5 +1,5 @@
 %%% INPUTS:
-%%% * fileInfo - file info structure, found in the data .mat file
+%%% * fileInfo - file info structure, found in the data *.mat file
 %%% * ttlchan - number of ttlchan used, if known
 %%% * timesonly - ignore the stimulus file, extract TTL times only
 
@@ -24,23 +24,27 @@ if (~timesonly)
     %% Convert stimulus file to correct format:
     
     % Extract the output mode (voltage or current) and corresponding units:
-    idx = strfind(stim, ['output mode:', char(9)]);
-    outputmode = stim(idx+13:idx+19);
-    if (strcmpi(outputmode, 'voltage'))
+%     idx = strfind(stim, ['output mode:', char(9)]);
+%     outputmode = stim(idx+13:idx+19);
+    outputmode = regexp(stim, 'output mode:\t(\w+)', 'tokens', 'once');
+    if (strcmpi(outputmode{1}, 'voltage'))
         units = 'mV';
     else
         units = 'uA';
     end
+
+    format = str2double(regexp(stim, 'format:\t(\d)', 'tokens', 'once'));
+    assert(ismember(format, [3, 5]), 'Format error: Only formats 3 and 5 are supported');
     
     % Determine maximum number of channels for this stimulator:
-    maxchans = str2double(stim(strfind(stim, 'output mode:')-3));
+    maxchans = str2double(regexp(stim, 'channels:\t(\d)', 'tokens', 'once'));
     
     % Find TTL section and convert to numbers:
-    numttl = max(cellfun(@str2double, regexp(stim, 'channel:\s(\d+)', 'tokens'))) - maxchans;
+    numttl = length(regexp(stim, 'channel:\t(\d)')) - maxchans;
     ttlstart = zeros(1,numttl);
     ttlvals = cell(1,numttl);
     for i = 1:numttl
-        ttlstart(i) = regexp(stim, ['channel:\s', num2str(i+maxchans)]) + 53;
+        ttlstart(i) = regexp(stim, sprintf('channel:\t%d\\D+', i+maxchans), 'end')+1;
         ttlvals{i} = sscanf(stim(ttlstart(i):end), '%f');
     end
     
@@ -52,41 +56,70 @@ if (~timesonly)
     ttlvals = ttlvals{usedttl};
     
     assert(~isempty(ttlvals), sprintf('Format error: TTL channel %d empty', ttlchan+maxchans));
-    assert(~any(ttlvals(repmat(logical([0 0 1 1 1 0 1]'),length(ttlvals)/7,1))), 'Format error: TTL columns 3, 4, 5, and 7 are not empty');
+    if (format == 3)
+        assert(~any(ttlvals(repmat(logical([0 0 1 1 1 0 1]'),length(ttlvals)/7,1))), 'Format error: TTL columns 3, 4, 5, and 7 are not zeros');
+    elseif (format == 5)
+        assert(~any(ttlvals(repmat(logical([1 1 0 0]'),length(ttlvals)/4,1))), 'Format error: TTL columns 1 and 2 are not zeros');
+    end
 %     assert(all(ttlvals(1:7:end) == 1), 'Format error: TTL voltages not all 1');
     
     stimvals = cell(1,maxchans); usedchans = zeros(1,maxchans,'logical');
     for i = 1:maxchans
         
         % Find start and end of ith channel stimuli definitions:
-        stimstart = strfind(stim, sprintf('channel:\t%d\r\n', i)) + 53;
-        stimend = strfind(stim(stimstart:end), 'channel:') + stimstart - 1;
-        if (length(stimend) > 1)
-            stimend = stimend(1);
-        end
+        stimstart = regexp(stim, sprintf('channel:\t%d\\D+', i), 'end')+1;
+        stimend = regexp(stim, sprintf('channel:\t%d\\D+', i+1), 'start')-5;
+%         if (length(stimend) > 1)
+%             stimend = stimend(1);
+%         end
         
         % Convert this section to numbers:
         stimvals{i} = sscanf(stim(stimstart:stimend), '%f');
         
-        % Make sure this channel is used:
-        if (isempty(stimvals{i}) || length(stimvals{i}) ~= length(ttlvals))
-            stimvals{i} = [];
-            continue;
+        % Make sure this channel is used and correctly formatted:
+        if (format == 3)
+            if (isempty(stimvals{i}) || length(stimvals{i}) ~= length(ttlvals))
+                stimvals{i} = [];
+                continue;
+            end
+            % Make sure the file matches the format we think it's in:
+            assert(mod(length(stimvals{i}),7) == 0, sprintf('Format error channel %d: Number of columns is wrong', i));
+            assert(~any(stimvals{i}(repmat(logical([0 0 0 0 1 0 1]'),length(stimvals{i})/7,1))), sprintf('Format error channel %d: Stimulus columns 5 and 7 are not empty', i));
+            % Check if this channel is used at all:
+            if (any(stimvals{i}(repmat(logical([1 0 1 0 0 0 0]'),length(stimvals{i})/7,1))))
+                usedchans(i) = true;
+            else
+                continue;
+            end
+        elseif (format == 5)
+            if (isempty(stimvals{i}) || sum(stimvals{i}(3:4:end) == 0) ~= length(ttlvals)/8)
+                stimvals{i} = [];
+                continue;
+            end
+            % Make sure the file matches the format we think it's in:
+            assert(mod(length(stimvals{i}),4) == 0, sprintf('Format error channel %d: Number of columns is wrong', i));
+            assert(all(ismember(stimvals{i}(1:4:end), [0, 2])), sprintf('Format error channel %d: Only rectangular and sinusoidal pulse shaped supported for Format 5', i));
+            % Check if this channel is used at all:
+            if (any(stimvals{i}(repmat(logical([1 0 1 0]'),length(stimvals{i})/4,1))))
+                usedchans(i) = true;
+            else
+                continue;
+            end
         end
         
-        % Make sure the file matches the format we think it's in:
-        assert(mod(length(stimvals{i}),7) == 0, 'Format error channel ', num2str(i), ': Number of columns is wrong');
-        assert(~any(stimvals{i}(repmat(logical([0 0 0 0 1 0 1]'),length(stimvals{i})/7,1))), 'Format error channel ', num2str(i), ': Stimulus columns 5 and 7 are not empty');
+%         % Make sure the file matches the format we think it's in:
+%         assert(mod(length(stimvals{i}),7) == 0, 'Format error channel ', num2str(i), ': Number of columns is wrong');
+%         assert(~any(stimvals{i}(repmat(logical([0 0 0 0 1 0 1]'),length(stimvals{i})/7,1))), 'Format error channel ', num2str(i), ': Stimulus columns 5 and 7 are not empty');
         
-        % Check if this channel is used at all:
-        if (any(stimvals{i}(repmat(logical([1 0 1 0 0 0 0]'),length(stimvals{i})/7,1))))
-            usedchans(i) = true;
-        else
-            continue;
-        end
+%         % Check if this channel is used at all:
+%         if (any(stimvals{i}(repmat(logical([1 0 1 0 0 0 0]'),length(stimvals{i})/7,1))))
+%             usedchans(i) = true;
+%         else
+%             continue;
+%         end
         
         % Check if this is a monophasic or biphasic stim file:
-        if (~any(stimvals{i}(3:7:end))) % Only 1 stim pulse per line = monophasic stimulation
+        if (format == 3 && ~any(stimvals{i}(3:7:end))) % Only 1 stim pulse per line = monophasic stimulation
             isMono = true;
             stimvals{i}(6:7:end) = stimvals{i}(6:7:end) + stimvals{i}(4:7:end); % add any time from the empty 2nd pulse to the ISI time
         else
@@ -94,16 +127,30 @@ if (~timesonly)
         end
         
         % Get rid of the unused columns in each vector:
-        %   * remaining columns: 1 = pulse amplitude, 2 = pulse width, 3 = inter-pulse delay
-        stimvals{i} = stimvals{i}(repmat(logical([1 1 ~isMono ~isMono 0 1 0]'),length(stimvals{i})/7,1));
+        if (format == 3)
+            %   * remaining columns: 1 = pulse amplitude, 2 = pulse width, 3 = inter-pulse delay
+            stimvals{i} = stimvals{i}(repmat(logical([1 1 ~isMono ~isMono 0 1 0]'),length(stimvals{i})/7,1));
+
+            % Get rid of unused columns in the TTL vector:
+            ttlvals = ttlvals(repmat(logical([1 1 0 0 0 1 0]'),length(ttlvals)/7,1));
+        elseif (format == 5)
+            %   * remaining columns: 1 = pulse shape, 2 = pulse amplitude, 3 = pulse duration
+            stimvals{i} = stimvals{i}(repmat(logical([1 0 1 1]'),length(stimvals{i})/4,1));
+            % Get rid of unused columns in the TTL vector:
+            ttlvals = ttlvals(repmat(logical([0 0 1 1]'),length(ttlvals)/4,1));
+        end
         
     end
     
-    % Get rid of unused columns in the TTL vector:
-    ttlvals = ttlvals(repmat(logical([1 1 0 0 0 1 0]'),length(ttlvals)/7,1));
+%     % Get rid of unused columns in the TTL vector:
+%     ttlvals = ttlvals(repmat(logical([1 1 0 0 0 1 0]'),length(ttlvals)/7,1));
     
     % Determine which channels were actually used:
     chanidxs = find(usedchans);
+
+    if (format == 5 && length(chanidxs) > 1)
+        error('Only a single stimulus channel is supported for Format 5');
+    end
     
 end
 
@@ -138,7 +185,11 @@ if (~timesonly)
     widths = (fallingedge - risingedge)';
     
     % Get intended TTL widths:
-    ttlwidths = ttlvals(2:3:end)'*fileInfo.srate/1e6; % in samples
+    if (format == 3)
+        ttlwidths = ttlvals(2:3:end)'*fileInfo.srate/1e6; % in samples
+    elseif (format == 5)
+        ttlwidths = ttlvals(2:4:end)'*fileInfo.srate/1e6; % in samples
+    end
     
     % Find where intended TTL matches up with our measured values:
     for i = 1:length(ttlwidths)
@@ -167,10 +218,20 @@ end
 n = length(risingedge);
        
 % Split events into trials (paired pulses):
-trials = repmat(struct('StimNumber', [], ...
-                       'StimLoc_sample', [],  ...
-                       'StimWidth_ms', [], ...
-                       'StimAmp', []), 1, n);
+if (format == 3)
+    trials = repmat(struct('StimNumber', [], ...
+                           'StimLoc_sample', [],  ...
+                           'StimWidth_ms', [], ...
+                           'StimAmp', []), 1, n);
+elseif (format == 5)
+    trials = repmat(struct('StimNumber', [], ...
+                           'StimLoc_sample', [],  ...
+                           'StimWidth_ms', [], ...
+                           'StimFreq', [], ...
+                           'StimAmp', []), 1, n);
+
+    stimidxs = [eventstart-1; find(stimvals{chanidxs}(2:3:end) == 0)];
+end
 
 for i = 1:n
     
@@ -181,18 +242,29 @@ for i = 1:n
     trials(i).StimLoc_sample = risingedge(i);
     
     if (~timesonly)
-        % Record width (in ms) of stimulus pulse:
-        if (isMono)
-            trials(i).StimWidth_ms = arrayfun(@(x) stimvals{x}(2 + (i+eventstart-2)*3)/1000, chanidxs);
-        else % [channel1phase1 ... channelNphase1; channel1phase2 ... channelNphase2]
-            trials(i).StimWidth_ms = cell2mat(arrayfun(@(x) stimvals{x}([2,4] + (i+eventstart-2)*5)/1000, chanidxs, 'UniformOutput', false));
-        end
-        
-        % Record amplitude (in either mV or uA) of stimulus pulse:
-        if (isMono)
-            trials(i).StimAmp = arrayfun(@(x) stimvals{x}(1 + (i+eventstart-2)*3), chanidxs);
-        else % [channel1phase1 ... channelNphase1; channel1phase2 ... channelNphase2]
-            trials(i).StimAmp = cell2mat(arrayfun(@(x) stimvals{x}([1,3] + (i+eventstart-2)*5), chanidxs, 'UniformOutput', false));
+        if (format == 3)
+            % Record width (in ms) of stimulus pulse:
+            if (isMono)
+                trials(i).StimWidth_ms = arrayfun(@(x) stimvals{x}(2 + (i+eventstart-2)*3)/1000, chanidxs);
+            else % [channel1phase1 ... channelNphase1; channel1phase2 ... channelNphase2]
+                trials(i).StimWidth_ms = cell2mat(arrayfun(@(x) stimvals{x}([2,4] + (i+eventstart-2)*5)/1000, chanidxs, 'UniformOutput', false));
+            end
+
+            % Record amplitude (in either mV or uA) of stimulus pulse:
+            if (isMono)
+                trials(i).StimAmp = arrayfun(@(x) stimvals{x}(1 + (i+eventstart-2)*3), chanidxs);
+            else % [channel1phase1 ... channelNphase1; channel1phase2 ... channelNphase2]
+                trials(i).StimAmp = cell2mat(arrayfun(@(x) stimvals{x}([1,3] + (i+eventstart-2)*5), chanidxs, 'UniformOutput', false));
+            end
+        elseif (format == 5)
+            % Record width (in ms) of stimulus pulse:
+            trials(i).StimWidth_ms = sum(stimvals{chanidxs}((stimidxs(i)+1)*3:3:(stimidxs(i+1)-1)*3))/1000;
+
+            % Record frequency (in hz) of stimulus pulse:
+            trials(i).StimFreq = 1/(stimvals{chanidxs}((stimidxs(i)+1)*3)/1e6);
+
+            % Record amplitude (in either mV or uA) of stimulus pulse:
+            trials(i).StimAmp = stimvals{chanidxs}((stimidxs(i)+1)*3 - 1);
         end
     end
 end

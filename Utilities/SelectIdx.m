@@ -13,4 +13,8 @@ for i = 1:nargin-1
     end
 end
 
-out = data(varargin{:});
+if ~iscell(data)
+    out = data(varargin{:});
+else
+    out = data{varargin{:}};
+end
