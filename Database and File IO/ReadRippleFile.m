@@ -1,5 +1,5 @@
 % data - [N x M] N channels, M data points
-% time - [1 x M] M time points (in 30kHz samples)
+% time - [1 x M] M time points (in seconds)
 % meta - information structure
 
 function [data, time, meta] = ReadRippleFile(fname)
@@ -124,5 +124,5 @@ while ~feof(fid)
 end
 
 data = cell2mat(data);
-time = cell2mat(time);
+time = cell2mat(time)/30e3;
 
