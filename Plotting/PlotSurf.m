@@ -1,5 +1,8 @@
 function h = PlotSurf(x, y, c, yscale, mask)
 
+if (isempty(c))
+    return;
+end
 if (isempty(x))
     x = 1:size(c,2);
 end

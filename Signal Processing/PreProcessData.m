@@ -52,9 +52,9 @@ end
 if (~isempty(filtband) && ~all(isnan(data),'all'))
     if (length(filtband) == 2)
         [b, a] = butter(2, filtband/(samplerate/2), 'bandpass');
-    elseif (sign(filtband) > 1)
+    elseif (sign(filtband) > 0)
         [b, a] = butter(4, abs(filtband)/(samplerate/2), 'high');
-    elseif (sign(filtband) < 1)
+    elseif (sign(filtband) < 0)
         [b, a] = butter(4, abs(filtband)/(samplerate/2), 'low');
     end
     for i = 1:size(D,1)
