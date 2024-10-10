@@ -171,8 +171,8 @@ function GUI = CreateWindow() %#ok<DEFNU>
     
     % ==== Menu PLUGINS ====
     jMenuPlugins = gui_component('Menu', jMenuBar, [], 'Plugins', [], [], [], fontSize);
-        jMenusPlug = bst_plugin('MenuCreate', jMenuPlugins, fontSize);
-        java_setcb(jMenuPlugins, 'MenuSelectedCallback', @(h,ev)bst_plugin('MenuUpdate', jMenusPlug));
+        jMenusPlug = bst_plugin('MenuCreate', jMenuPlugins, [], fontSize);
+        java_setcb(jMenuPlugins, 'MenuSelectedCallback', @(h,ev)bst_plugin('MenuUpdate', jMenuPlugins, fontSize));
        
     % ==== Menu HELP ====
     jMenuSupport = gui_component('Menu', jMenuBar, [], ' Help ', [], [], [], fontSize);
@@ -184,6 +184,7 @@ function GUI = CreateWindow() %#ok<DEFNU>
         jMenuSupport.addSeparator();
         % USAGE STATS
         gui_component('MenuItem', jMenuSupport, [], 'Usage statistics', IconLoader.ICON_TS_DISPLAY, [], @(h,ev)bst_userstat, fontSize);
+        gui_component('MenuItem', jMenuSupport, [], 'System info', IconLoader.ICON_SCREEN1, [], @(h,ev)bst_systeminfo(1), fontSize);
         jMenuSupport.addSeparator();
         % LICENSE
         gui_component('MenuItem', jMenuSupport, [], 'License',       IconLoader.ICON_EDIT, [], @(h,ev)bst_license(), fontSize);
@@ -491,7 +492,8 @@ function GUI = CreateWindow() %#ok<DEFNU>
                struct('name', 'tools', ...
                       'jHandle', jTabpaneTools)], ...
          'panels',  BstPanel(), ...  % [0x0] array of BstPanel objects
-         'nodelists', repmat(db_template('nodelist'), 0));
+         'nodelists', repmat(db_template('nodelist'), 0), ...
+         'pluginMenus', jMenusPlug);
 
 
 %% =================================================================================
@@ -881,7 +883,7 @@ function UpdateProtocolsList()
     end
     % Set current protocol
     iProtocol = GlobalData.DataBase.iProtocol;
-    if ~isempty(iProtocol) && isnumeric(iProtocol) && (iProtocol > 0) && (iProtocol < length(GlobalData.DataBase.ProtocolInfo))
+    if ~isempty(iProtocol) && isnumeric(iProtocol) && (iProtocol > 0) && (iProtocol <= length(GlobalData.DataBase.ProtocolInfo))
         iSel = find(indProtocols == iProtocol);
         ctrl.jComboBoxProtocols.setSelectedIndex(iSel-1);
     end

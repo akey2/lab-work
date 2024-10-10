@@ -33,7 +33,7 @@ function sProcess = GetDescription() %#ok<DEFNU>
     sProcess.Category    = 'Custom';
     sProcess.SubGroup    = 'Artifacts';
     sProcess.Index       = 115;
-    sProcess.Description = 'https://neuroimage.usc.edu/brainstorm/Tutorials/MedianNerveCtf#Review_the_individual_trials';
+    sProcess.Description = 'https://neuroimage.usc.edu/brainstorm/Tutorials/ArtifactsDetect#Other_detection_processes';
     % Definition of the input accepted by this process
     sProcess.InputTypes  = {'raw', 'data'};
     sProcess.OutputTypes = {'raw', 'data'};
@@ -88,7 +88,7 @@ function sProcess = GetDescription() %#ok<DEFNU>
     sProcess.options.win_length.Value   = {1, 's', []};
     sProcess.options.win_length.InputTypes = {'raw'};
     % Reject entire trial
-    sProcess.options.rejectmode.Comment = {'Reject only the bad channels', 'Reject the entire trial (all channels)'};
+    sProcess.options.rejectmode.Comment = {'Reject only the bad channels', 'Reject the entire segments/trials (all channels)'};
     sProcess.options.rejectmode.Type    = 'radio';
     sProcess.options.rejectmode.Value   = 2;
 end
@@ -109,7 +109,7 @@ function Comment = FormatComment(sProcess)
     if (sProcess.options.rejectmode.Value == 1)
         Comment = 'Detect bad channels: Peak-to-peak ';
     else
-        Comment = 'Detect bad trials: Peak-to-peak ';
+        Comment = 'Detect bad segments/trials: Peak-to-peak ';
     end
     % What are the criteria
     for critName = {'meggrad', 'megmag', 'eeg', 'eog', 'ecg'}
@@ -172,8 +172,6 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
         % === LOAD FILE ===
         % Progress bar
         bst_progress('set', progressPos + round(iFile / length(sInputs) * 100));
-        % Get file in database
-        [sStudy, iStudy, iData] = bst_get('DataFile', sInputs(iFile).FileName);
         % Load channel file (if not already loaded
         ChannelFile = sInputs(iFile).ChannelFile;
         if isempty(prevChannelFile) || ~strcmpi(ChannelFile, prevChannelFile)
@@ -204,8 +202,10 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
             blockLengthSamples = max(floor(ProcessOptions.MaxBlockSize / nChannels), 1);
             % Sampling frequency
             fs = 1 ./ (DataMat.Time(2) - DataMat.Time(1));
-            % Length of window of analysis in samples
+            % Length of the analysis window in samples
             winLengthSamples   = round(fs*winLength);
+            % Block length as multiple of the length of the analysis window
+            blockLengthSamples = winLengthSamples * floor(blockLengthSamples / winLengthSamples);
             % List of bad events for this file
             sBadEvents = repmat(db_template('event'), 0);
             % Indices for each block
@@ -312,9 +312,6 @@ function OutputFiles = Run(sProcess, sInputs) %#ok<DEFNU>
                     iBadTrials(end+1) = iFile;
                     % Report
                     bst_report('Info', sProcess, sInputs(iFile), 'Marked as bad trial.');
-                    % Update study
-                    sStudy.Data(iData).BadTrial = 1;
-                    bst_set('Study', iStudy, sStudy);
                 % Reject channels only
                 else
                     % Add detected channels to list of file bad channels

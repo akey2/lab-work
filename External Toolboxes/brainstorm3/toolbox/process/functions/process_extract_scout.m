@@ -186,18 +186,15 @@ function OutputFiles = Run(sProcess, sInputs)
     end
 
     % Unconstrained orientations
-    % Only allow norm when called without new pca flattening option.
-    if isfield(sProcess.options, 'flatten') && isfield(sProcess.options.flatten, 'Value') 
-        if isequal(sProcess.options.flatten.Value, 1)
-            UnconstrFunc = 'pca';
-        else
-            UnconstrFunc = 'none';
-        end
-    elseif isfield(sProcess.options, 'isnorm') && isfield(sProcess.options.isnorm, 'Value') && isequal(sProcess.options.isnorm.Value, 1)
+    UnconstrFunc = 'none';
+    % Perform norm if requested ('isnorm' may be set to '1' by calling process)
+    if isfield(sProcess.options, 'isnorm') && isfield(sProcess.options.isnorm, 'Value') && isequal(sProcess.options.isnorm.Value, 1)
         UnconstrFunc = 'norm';
-    else
-        UnconstrFunc = 'none';
+    % If norm=0, then check if PCA fattening was requested
+    elseif isfield(sProcess.options, 'flatten') && isfield(sProcess.options.flatten, 'Value') && isequal(sProcess.options.flatten.Value, 1)
+        UnconstrFunc = 'pca';
     end
+
     % Check if there actually are sources with unconstrained orientations
     if ~strcmpi(UnconstrFunc, 'none')
         % Check if there are unconstrained sources. The function only checks the first file. Other files
@@ -361,6 +358,10 @@ function OutputFiles = Run(sProcess, sInputs)
                 OutputFiles = {};
                 CleanExit; return; % Error already reported.
             end
+            % If norm, orientations will be aggregated, keep only one name per scout
+            if strcmpi(UnconstrFunc, 'norm')
+                RowNames = {ScoutName};
+            end
             if AddFileComment && ~isempty(fileComment)
                 RowNames = cellfun(@(c) [c ' @ ' fileComment], RowNames, 'UniformOutput', false);
             end
@@ -467,15 +468,17 @@ function OutputFiles = Run(sProcess, sInputs)
                     scoutStd = cat(1, scoutStd, tmpScoutStd);
                 end
                 % Add frequency to row descriptions.
-                if (nFreq > 1) && AddFileComment
+                if isfield(sResults, 'Freqs') && ~isempty(sResults.Freqs) && ((iscell(sResults.Freqs) && size(sResults.Freqs,1) == nFreq) || (~iscell(sResults.Freqs) && length(sResults.Freqs) == nFreq))
                     if iscell(sResults.Freqs)
                         freqComment = [' ' sResults.Freqs{iFreq,1}];
                     else
                         freqComment = [' ' num2str(sResults.Freqs(iFreq)), 'Hz'];
                     end
-                    RowNames = cellfun(@(c) [c freqComment], RowNames, 'UniformOutput', false);
+                    RowNamesFreq = cellfun(@(c) [c freqComment], RowNames, 'UniformOutput', false);
+                else
+                    RowNamesFreq = RowNames;
                 end
-                Description = cat(1, Description, RowNames);
+                Description = cat(1, Description, RowNamesFreq);
             end
         end
         % If nothing was found
