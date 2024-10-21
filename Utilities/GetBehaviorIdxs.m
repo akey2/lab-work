@@ -35,7 +35,7 @@ end
 
 start = finfo.Behavior.StartTime(behav_idxs);
 stop = finfo.Behavior.StopTime(behav_idxs);
-idxs = arrayfun(@(x,y) round(x*sr):min(round(y*sr), finfo.TotalRecTime*sr), start, stop, 'uni', 0);
+idxs = arrayfun(@(x,y) (round(x*sr)+1):min(round(y*sr), finfo.TotalRecTime*sr), start, stop, 'uni', 0);
 
 if ~split
     idxs = unique(cell2mat(idxs'));
