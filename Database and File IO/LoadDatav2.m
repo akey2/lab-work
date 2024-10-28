@@ -1,3 +1,20 @@
+% Load data associated with a particular subject/file.
+%
+% Inputs:
+%   * subjID - string specifying subject id (e.g. "BI002")
+%   * filename - string specifying file name (e.g. "LFP1")
+%   * (optional) path - string specifying path to file
+%       - if not provided, the function will open a GUI to locate the file
+%         manually
+%   * (optional) infoonly - boolean specifying whether to only load in the
+%         file info structure, or (default) both the info and the data
+%
+% Outputs:
+%   * Data - MxN matrix of M channels and N timepoints
+%   * FileInfo - structure with recording information about the file
+%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 function [Data, FileInfo] = LoadDatav2(subjID, filename, path, infoonly)
 
 if (nargin < 3)
