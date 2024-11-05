@@ -138,7 +138,7 @@ if (~timesonly)
                     stimvals(j).StimWidth_ms(end+1) = stimvalschan(2 + (j-1)*7);
                     stimvals(j).StimAmp(end+1) = stimvalschan(1 + (j-1)*7);
                 else % [channel1phase1 ... channelNphase1; channel1phase2 ... channelNphase2]
-                    stimvals(j).StimWidth_ms(end+1) = stimvalschan([1,3] + (j-1)*7);
+                    stimvals(j).StimWidth_ms(end+1) = stimvalschan([1,3] + (j-1)*7)/1000;
                     stimvals(j).StimAmp(end+1) = stimvalschan([1,3] + (j-1)*7);
                 end
             end
@@ -148,7 +148,7 @@ if (~timesonly)
             for j = 1:length(stimvals)
                 stimvals(j).StimNumber = j;
                 stimvals(j).StimChans(end+1) = i;
-                stimvals(j).StimWidth_ms(end+1) = sum(stimvalschan((stimidxs(j)+1)*4:4:(stimidxs(j+1)-1)*4));
+                stimvals(j).StimWidth_ms(end+1) = sum(stimvalschan((stimidxs(j)+1)*4:4:(stimidxs(j+1)-1)*4))/1000;
                 stimvals(j).StimFreq(end+1) = 1/(stimvalschan(4 + (stimidxs(j))*4)/1e6);
                 stimvals(j).StimAmp(end+1) = stimvalschan(3 + (stimidxs(j))*4);
             end
