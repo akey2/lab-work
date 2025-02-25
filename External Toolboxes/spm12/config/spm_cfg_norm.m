@@ -353,7 +353,7 @@ def.help    = {[...
     'NIfTI format, with dimensions xdim x ydim x zdim x 1 x 3. ',...
     'Each voxel contains the x, y and z mm coordinates of where the deformation points.']};
 def.filter  = 'nifti';
-def.ufilter = 'y_.*\.nii$';
+def.ufilter = '.*\.nii$';
 def.num     = [1 1];
 
 %--------------------------------------------------------------------------

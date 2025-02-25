@@ -10,10 +10,12 @@
 %           - row 2: reference channel (0 = average)
 %           - example (bipolar montage): [1, 2, 3, 4; 2, 3, 4, 5]
 % badchannels: [1xM] vector of known bad channels (not contacts)
-function [D, newrate] = PreProcessData(data, filtband, samplerate, newrate, montage, badchannels)
+function [D, newrate, t] = PreProcessData(data, filtband, samplerate, newrate, montage, badchannels)
 
 if (nargin < 4)
     newrate = [];
+elseif (newrate > samplerate)
+    error("Output sample rate must be strictly lower than original rate");
 end
 if (nargin < 5)
     montage = [];
@@ -65,11 +67,27 @@ if (~isempty(filtband) && ~all(isnan(data),'all'))
     end
 end
 
-% Downsample:
+% Resample:
 if (~isempty(newrate) && ~isempty(samplerate))
-    skip = round(samplerate/newrate);
-    D = D(:,1:skip:end);
-    newrate = samplerate/skip;
+
+    t = (1/samplerate):(1/samplerate):(size(D, 2)/samplerate);
+
+    [up_fact, down_fact] = rat(newrate/samplerate);
+    
+    % Upsample:
+    if (up_fact > 1) 
+        sr_up = samplerate*up_fact;
+        t_up = t(1):(1/sr_up):t(end);
+        D = interp1(t, D', t_up)';
+    else
+        t_up = t;
+    end
+
+    % Downsample:
+    t = t_up(1:down_fact:end);
+    D = D(:,1:down_fact:end);
+    newrate = round(samplerate*up_fact/down_fact);
+
 end
 
 if (trans)

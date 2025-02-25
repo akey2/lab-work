@@ -95,8 +95,8 @@ if (~timesonly)
         % Make sure this channel is used and correctly formatted:
         isMono = false;
         if (format == 3)
-            if (isempty(stimvalschan) || length(stimvalschan) ~= length(ttlwidths))
-                stimvalschan{i} = [];
+            if (isempty(stimvalschan) || length(stimvalschan)/7 ~= length(ttlwidths))
+%                 stimvalschan{i} = [];
                 continue;
             end
 
@@ -110,7 +110,7 @@ if (~timesonly)
             end
             
              % Check if this is a monophasic or biphasic stim file:
-            if (~any(stimvalschan{i}(3:7:end)))
+            if (~any(stimvalschan(3:7:end)))
                 isMono = true;
                 stimvalschan(6:7:end) = stimvalschan(6:7:end) + stimvalschan(4:7:end); % add any time from the empty 2nd pulse to the ISI time
             end

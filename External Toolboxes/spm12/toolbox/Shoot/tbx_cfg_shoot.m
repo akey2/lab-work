@@ -112,7 +112,7 @@ deformations.tag     = 'deformations';
 deformations.name    = 'Deformation fields';
 deformations.help    = {'Select the deformation fields for each subject.'};
 deformations.filter = 'nifti';
-deformations.ufilter = '^y_.*';
+deformations.ufilter = '.*';
 deformations.num     = [1 Inf];
 % ---------------------------------------------------------------------
 % See later
@@ -242,7 +242,7 @@ deformation.tag     = 'deformation';
 deformation.name    = 'Deformation field';
 deformation.help    = {'Select the deformation field for this subject.'};
 deformation.filter  = 'nifti';
-deformation.ufilter = '^y_.*\.nii$';
+deformation.ufilter = '.*\.nii$';
 deformation.num     = [1 1];
 % ---------------------------------------------------------------------
 %

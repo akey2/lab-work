@@ -9,6 +9,8 @@ end
 
 if (isempty(x))
     x = (1:size(data,1))';
+elseif isrow(x)
+    x = x';
 end
 
 if (nargin < 4 || isempty(err))

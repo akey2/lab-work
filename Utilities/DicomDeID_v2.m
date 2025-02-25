@@ -46,14 +46,17 @@ for i = 1:length(files)
     end
     
     % get rid of any references to image creation date (may be different from study date in some cases):
-    studydate = info.InstanceCreationDate;
-    len = length(studydate);
-    
-    idxs = strfind(dcm, studydate);
-    for j = 1:length(idxs)
-        dcm(idxs(j):(idxs(j) + len - 1)) = 48;
+    if (isfield(info, 'InstanceCreationDate'))
+        studydate = info.InstanceCreationDate;
+        len = length(studydate);
+
+
+        idxs = strfind(dcm, studydate);
+        for j = 1:length(idxs)
+            dcm(idxs(j):(idxs(j) + len - 1)) = 48;
+        end
     end
-    
+
     % get rid of any references to accession number:
     accnum = info.AccessionNumber;
     len = length(accnum);
@@ -65,21 +68,42 @@ for i = 1:length(files)
     % get rid of patient birth date:
     bd = info.PatientBirthDate;
     len = length(bd);
-    idx = strfind(dcm,[16 0 48 0 68 65]);
+    idx = strfind(dcm,[16 0 48 0 68 65]); % DICOM data dictionary element
     dcm((idx+8):(idx+7+len)) = 48;
     
     % get rid of patient age:
-    age = info.PatientAge;
-    len = length(age);
-    idx = strfind(dcm,[16 0 16 16 65 83]);
-    dcm((idx+8):(idx+7+len)) = 48;
+    if (isfield(info, 'PatientAge'))
+        age = info.PatientAge;
+        len = length(age);
+        idx = strfind(dcm,[16 0 16 16 65 83]);
+        dcm((idx+8):(idx+7+len)) = 48;
+    end
     
     % get rid of patient comments:
-    com = info.PatientComments;
-    len = length(com);
-    idx = strfind(dcm,[16 0 0 64 76 84]);
-    dcm((idx+8):(idx+7+len)) = 48;
-    
+    if (isfield(info, 'PatientComments'))
+        com = info.PatientComments;
+        len = length(com);
+        idx = strfind(dcm,[16 0 0 64 76 84]);
+        dcm((idx+8):(idx+7+len)) = 48;
+    end
+
+    % get rid of patient id:
+    if (isfield(info, 'PatientID'))
+        id = info.PatientID;
+        len = length(id);
+        idx = strfind(dcm,[16 0 32 0 76 79]);
+        dcm((idx+8):(idx+7+len)) = 48;
+    end
+
+     % get rid of patient name:
+    if (isfield(info, 'PatientName'))
+        idx = strfind(dcm,[16 0 16 0 80 78]);
+        for j = 1:length(idx)
+            idxend = idx(j) + 8 + find(ismember(dcm(idx(j)+8:idx(j)+100), [0, 16]), 1) - 2;
+            dcm((idx(j)+8):idxend) = 48;
+        end
+    end
+
     % write file:
     fid = fopen([newfpath, '\', files(i).name], 'w');
     fwrite(fid, dcm);

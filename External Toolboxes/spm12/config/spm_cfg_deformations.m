@@ -95,7 +95,7 @@ hidbbvox = {[...
 'are generated from it).  Dimensions, orientation etc are derived from ',...
 'a specified bounding box and voxel dimensions.']};
 
-def          = files('Deformation Field','def','.*y_.*\.nii$',[1 1]);
+def          = files('Deformation Field','def','.*\.nii$',[1 1]);
 def.help     = himgr;
 
 matname      = files('Parameter File','matname','.*_sn\.mat$',[1 1]);

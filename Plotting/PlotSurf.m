@@ -16,6 +16,10 @@ if (nargin < 5)
     mask = [];
 end
 
+if (size(c,1) ~= length(y) || size(c,2) ~= length(x))
+    error('Size of data does not match x and y inputs');
+end
+
 if (size(x,1) > size(x,2))
     x = x';
 end
