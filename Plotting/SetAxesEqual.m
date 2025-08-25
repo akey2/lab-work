@@ -22,7 +22,7 @@ end
     
 % find all axes objects:
 if (isa(handle, 'matlab.ui.Figure'))
-    hax = hfig.Children(arrayfun(@(x) isa(x, 'matlab.graphics.axis.Axes'), hfig.Children));
+    hax = handle.Children(arrayfun(@(x) isa(x, 'matlab.graphics.axis.Axes'), handle.Children));
 else
     hax = handle;
 end

@@ -86,8 +86,8 @@ if (~timesonly)
     for i = 1:maxchans
         
         % Find start and end of ith channel stimuli definitions:
-        stimstart = regexp(stim, sprintf('channel:\t%d\\D+', i), 'end')+1;
-        stimend = regexp(stim, sprintf('channel:\t%d\\D+', i+1), 'start')-5;
+        stimstart = regexp(stim, sprintf('channel:\t%d[^0-9-]+', i), 'end')+1;
+        stimend = regexp(stim, sprintf('channel:\t%d[^0-9-]+', i+1), 'start')-5;
         
         % Convert this section to numbers:
         stimvalschan = sscanf(stim(stimstart:stimend), '%f');
@@ -220,8 +220,10 @@ if (~timesonly)
         runidxs = runidxs(i:end);
 
         % If we didn't find a match, or there weren't enough captured values, throw an error:
-        if (length(runidxs) < 10)
+        if (isempty(runidxs))
             error('Event error: measured TTL widths don''t match stimulus file');
+        elseif (length(runidxs) < 10)
+            warning('Event warning: found a short stimulus train - check this for errors');
         end
 
         trials(runidxs) = stimvals(i:i + length(runidxs) - 1);

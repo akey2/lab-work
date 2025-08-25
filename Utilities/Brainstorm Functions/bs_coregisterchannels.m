@@ -116,6 +116,8 @@ chanstruct.Channel = [];
 badsubs = [];
 for i = 1:length(subjids)
     
+    fprintf('   * %s\n', subjids{i});
+
     subidx = find(strcmp(subnames, subjids{i}));
     if (isempty(subidx))
         warning('Subject %s not found in brainstorm protocol', subjids{i});
